@@ -1,8 +1,16 @@
 from datetime import date, datetime
+import os
 import sqlite3
 import uuid
 import pandas as pd
 import streamlit as st
+
+try:
+  import sqlalchemy
+
+  SQLALCHEMY_AVAILABLE = True
+except ImportError:
+  SQLALCHEMY_AVAILABLE = False
 
 st.set_page_config(
     page_title="Animal Farm Management System",
@@ -10,7 +18,7 @@ st.set_page_config(
     layout="wide",
 )
 
-DB_PATH = "animal_farm_management.db"
+SQLITE_PATH = "animal_farm_management.db"
 
 ANIMAL_CATEGORIES = [
     "Pigs / Swine",
@@ -22,137 +30,459 @@ ANIMAL_CATEGORIES = [
     "Other Livestock",
 ]
 
+ANIMAL_IMAGES = {
+    "Pigs / Swine": (
+        "https://images.unsplash.com/photo-1516467508483-a7212febe31a?auto=format&fit=crop&w=600&q=80"
+    ),
+    "Poultry (Broilers / Layers)": (
+        "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?auto=format&fit=crop&w=600&q=80"
+    ),
+    "Cattle": (
+        "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?auto=format&fit=crop&w=600&q=80"
+    ),
+    "Goats": (
+        "https://images.unsplash.com/photo-1524024973431-2ad916746881?auto=format&fit=crop&w=600&q=80"
+    ),
+    "Sheep": (
+        "https://images.unsplash.com/photo-1484557985045-edf25e08da73?auto=format&fit=crop&w=600&q=80"
+    ),
+    "Rabbits": (
+        "https://images.unsplash.com/photo-1585110396000-c9ffd4e4b308?auto=format&fit=crop&w=600&q=80"
+    ),
+    "Other Livestock": (
+        "https://images.unsplash.com/photo-1500595046711-ee27150ad24e?auto=format&fit=crop&w=600&q=80"
+    ),
+}
 
-def init_db():
-  with sqlite3.connect(DB_PATH) as conn:
-    conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                full_name TEXT NOT NULL,
-                role TEXT NOT NULL,
-                password TEXT NOT NULL
-            )
-        """)
-    conn.execute("""
-            CREATE TABLE IF NOT EXISTS animals (
-                id_number TEXT PRIMARY KEY,
-                animal_type TEXT NOT NULL,
-                room_number TEXT NOT NULL,
-                date_brought TEXT NOT NULL,
-                sex TEXT NOT NULL,
-                cost REAL DEFAULT 0.0,
-                date_of_birth TEXT,
-                crossing_date TEXT,
-                farrow_date TEXT,
-                status TEXT DEFAULT 'Active',
-                plan_buy_date TEXT,
-                plan_sell_date TEXT
-            )
-        """)
-    conn.execute("""
-            CREATE TABLE IF NOT EXISTS feed_and_mortality (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                animal_type TEXT NOT NULL,
-                room_number TEXT NOT NULL,
-                id_number TEXT,
-                feed_type TEXT NOT NULL,
-                food_type TEXT NOT NULL,
-                quantity REAL DEFAULT 0.0,
-                unit_cost REAL DEFAULT 0.0,
-                total_cost REAL DEFAULT 0.0,
-                date_recorded TEXT NOT NULL,
-                date_finish TEXT,
-                mortality_count INTEGER DEFAULT 0,
-                date_of_mortality TEXT,
-                other_expenses REAL DEFAULT 0.0
-            )
-        """)
-    conn.execute("""
-            CREATE TABLE IF NOT EXISTS health_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                id_number TEXT NOT NULL,
-                animal_type TEXT NOT NULL,
-                room_number TEXT NOT NULL,
-                visit_date TEXT NOT NULL,
-                disease TEXT NOT NULL,
-                medication TEXT NOT NULL,
-                vet_cost REAL DEFAULT 0.0
-            )
-        """)
-    conn.execute("""
-            CREATE TABLE IF NOT EXISTS inventory_and_sales (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                record_type TEXT NOT NULL,
-                animal_type TEXT NOT NULL,
-                id_number TEXT,
-                item_or_batch TEXT NOT NULL,
-                quantity REAL DEFAULT 1.0,
-                unit_price REAL DEFAULT 0.0,
-                total_amount REAL DEFAULT 0.0,
-                record_date TEXT NOT NULL,
-                plan_buy_time TEXT,
-                plan_sell_time TEXT
-            )
-        """)
-    conn.execute("""
-            CREATE TABLE IF NOT EXISTS workers (
-                worker_id TEXT PRIMARY KEY,
-                full_name TEXT NOT NULL,
-                role TEXT,
-                pay_cycle TEXT NOT NULL,
-                pay_rate REAL DEFAULT 0.0,
-                credit_owed REAL DEFAULT 0.0,
-                loan_balance REAL DEFAULT 0.0
-            )
-        """)
-    conn.execute("""
-            CREATE TABLE IF NOT EXISTS worker_finance_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                worker_id TEXT NOT NULL,
-                worker_name TEXT NOT NULL,
-                action_type TEXT NOT NULL,
-                amount REAL NOT NULL,
-                entry_date TEXT NOT NULL,
-                notes TEXT
-            )
-        """)
-    conn.execute("""
-            CREATE TABLE IF NOT EXISTS farm_loans (
-                loan_id TEXT PRIMARY KEY,
-                lender_name TEXT NOT NULL,
-                principal_amount REAL NOT NULL,
-                amount_paid REAL DEFAULT 0.0,
-                balance_due REAL NOT NULL,
-                date_taken TEXT NOT NULL,
-                notes TEXT
-            )
-        """)
-
-    # Seed default Admin and Staff accounts if not present
-    conn.execute("""
-            INSERT OR IGNORE INTO users (username, full_name, role, password)
-            VALUES ('admin', 'Farm Administrator', 'admin', 'admin123')
-        """)
-    conn.execute("""
-            INSERT OR IGNORE INTO users (username, full_name, role, password)
-            VALUES ('staff', 'Farm Supervisor', 'staff', 'staff123')
-        """)
+QUANTITY_PRESETS = [
+    1,
+    2,
+    5,
+    10,
+    20,
+    25,
+    50,
+    100,
+    200,
+    500,
+    1000,
+    "Custom (Type below)",
+]
 
 
-def read_df(query, params=()):
-  with sqlite3.connect(DB_PATH) as conn:
-    return pd.read_sql(query, conn, params=params)
+def quantity_selector(label, key_prefix, default_preset=10, min_val=0.0, step=1.0):
+  col_dd, col_txt = st.columns([1, 1])
+  default_idx = (
+      QUANTITY_PRESETS.index(default_preset)
+      if default_preset in QUANTITY_PRESETS
+      else 0
+  )
+  choice = col_dd.selectbox(
+      f"{label} (Quick Select)",
+      QUANTITY_PRESETS,
+      index=default_idx,
+      key=f"{key_prefix}_dd",
+  )
+  initial_val = (
+      float(choice) if isinstance(choice, (int, float)) else float(default_preset)
+  )
+  typed_val = col_txt.number_input(
+      f"Type Exact {label}",
+      min_value=float(min_val),
+      value=float(initial_val),
+      step=float(step),
+      key=f"{key_prefix}_num",
+  )
+  return float(typed_val)
 
 
-def exec_sql(query, params=()):
-  with sqlite3.connect(DB_PATH) as conn:
-    conn.execute(query, params)
-    conn.commit()
+def get_configured_db_url():
+  try:
+    for section in ("postgres", "neon"):
+      sec = st.secrets.get(section, {})
+      if isinstance(sec, dict) and sec.get("url"):
+        return str(sec["url"]).strip()
+    top_url = st.secrets.get("url", "") or st.secrets.get("DATABASE_URL", "")
+    if top_url:
+      return str(top_url).strip()
+  except Exception:
+    pass
+
+  env_url = os.environ.get("DATABASE_URL", "").strip()
+  if env_url:
+    return env_url
+
+  return ""
 
 
-def authenticate_user(username, password):
+@st.cache_resource
+def get_pg_engine():
+  if not SQLALCHEMY_AVAILABLE:
+    return None, "SQLAlchemy not installed (using SQLite)."
+  raw_url = get_configured_db_url()
+  if not raw_url:
+    return None, "No PostgreSQL URL configured (using SQLite)."
+
+  pg_url = raw_url
+  if pg_url.startswith("postgresql://") and "+psycopg2" not in pg_url:
+    pg_url = pg_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+  try:
+    engine = sqlalchemy.create_engine(pg_url, pool_pre_ping=True)
+    with engine.connect() as conn:
+      db_name = conn.execute(
+          sqlalchemy.text("SELECT current_database()")
+      ).scalar()
+    return engine, f"Connected to PostgreSQL ({db_name})"
+  except Exception as exc:
+    return None, f"PostgreSQL unavailable, using SQLite ({exc})"
+
+
+def use_postgres(engine):
+  return engine is not None and SQLALCHEMY_AVAILABLE
+
+
+def init_db(engine):
+  if use_postgres(engine):
+    with engine.begin() as conn:
+      conn.execute(
+          sqlalchemy.text("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    full_name TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    password TEXT NOT NULL
+                )
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                CREATE TABLE IF NOT EXISTS animals (
+                    id_number TEXT PRIMARY KEY,
+                    animal_type TEXT NOT NULL,
+                    room_number TEXT NOT NULL,
+                    date_brought TEXT NOT NULL,
+                    sex TEXT NOT NULL,
+                    cost DOUBLE PRECISION DEFAULT 0.0,
+                    date_of_birth TEXT,
+                    crossing_date TEXT,
+                    farrow_date TEXT,
+                    status TEXT DEFAULT 'Active',
+                    plan_buy_date TEXT,
+                    plan_sell_date TEXT
+                )
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                CREATE TABLE IF NOT EXISTS feed_and_mortality (
+                    id SERIAL PRIMARY KEY,
+                    animal_type TEXT NOT NULL,
+                    room_number TEXT NOT NULL,
+                    id_number TEXT,
+                    feed_type TEXT NOT NULL,
+                    food_type TEXT NOT NULL,
+                    food_quantity_of_what TEXT,
+                    quantity DOUBLE PRECISION DEFAULT 0.0,
+                    unit_cost DOUBLE PRECISION DEFAULT 0.0,
+                    total_cost DOUBLE PRECISION DEFAULT 0.0,
+                    date_recorded TEXT NOT NULL,
+                    date_finish TEXT,
+                    mortality_count INTEGER DEFAULT 0,
+                    mortality_of_what TEXT,
+                    death_count INTEGER DEFAULT 0,
+                    death_of_what TEXT,
+                    date_of_mortality TEXT,
+                    date_of_death TEXT,
+                    other_expenses DOUBLE PRECISION DEFAULT 0.0
+                )
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                ALTER TABLE feed_and_mortality ADD COLUMN IF NOT EXISTS food_quantity_of_what TEXT
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                ALTER TABLE feed_and_mortality ADD COLUMN IF NOT EXISTS mortality_of_what TEXT
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                ALTER TABLE feed_and_mortality ADD COLUMN IF NOT EXISTS death_count INTEGER DEFAULT 0
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                ALTER TABLE feed_and_mortality ADD COLUMN IF NOT EXISTS death_of_what TEXT
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                ALTER TABLE feed_and_mortality ADD COLUMN IF NOT EXISTS date_of_death TEXT
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                CREATE TABLE IF NOT EXISTS health_logs (
+                    id SERIAL PRIMARY KEY,
+                    id_number TEXT NOT NULL,
+                    animal_type TEXT NOT NULL,
+                    room_number TEXT NOT NULL,
+                    visit_date TEXT NOT NULL,
+                    disease TEXT NOT NULL,
+                    medication TEXT NOT NULL,
+                    vet_cost DOUBLE PRECISION DEFAULT 0.0
+                )
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                CREATE TABLE IF NOT EXISTS inventory_and_sales (
+                    id SERIAL PRIMARY KEY,
+                    record_type TEXT NOT NULL,
+                    animal_type TEXT NOT NULL,
+                    id_number TEXT,
+                    item_or_batch TEXT NOT NULL,
+                    quantity DOUBLE PRECISION DEFAULT 1.0,
+                    unit_price DOUBLE PRECISION DEFAULT 0.0,
+                    total_amount DOUBLE PRECISION DEFAULT 0.0,
+                    record_date TEXT NOT NULL,
+                    plan_buy_time TEXT,
+                    plan_sell_time TEXT
+                )
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                CREATE TABLE IF NOT EXISTS workers (
+                    worker_id TEXT PRIMARY KEY,
+                    full_name TEXT NOT NULL,
+                    role TEXT,
+                    pay_cycle TEXT NOT NULL,
+                    pay_rate DOUBLE PRECISION DEFAULT 0.0,
+                    credit_owed DOUBLE PRECISION DEFAULT 0.0,
+                    loan_balance DOUBLE PRECISION DEFAULT 0.0
+                )
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                CREATE TABLE IF NOT EXISTS worker_finance_logs (
+                    id SERIAL PRIMARY KEY,
+                    worker_id TEXT NOT NULL,
+                    worker_name TEXT NOT NULL,
+                    action_type TEXT NOT NULL,
+                    amount DOUBLE PRECISION NOT NULL,
+                    entry_date TEXT NOT NULL,
+                    notes TEXT
+                )
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                CREATE TABLE IF NOT EXISTS farm_loans (
+                    loan_id TEXT PRIMARY KEY,
+                    lender_name TEXT NOT NULL,
+                    principal_amount DOUBLE PRECISION NOT NULL,
+                    amount_paid DOUBLE PRECISION DEFAULT 0.0,
+                    balance_due DOUBLE PRECISION NOT NULL,
+                    date_taken TEXT NOT NULL,
+                    notes TEXT
+                )
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                INSERT INTO users (username, full_name, role, password)
+                VALUES ('admin', 'Farm Administrator', 'admin', 'admin123')
+                ON CONFLICT (username) DO NOTHING
+            """)
+      )
+      conn.execute(
+          sqlalchemy.text("""
+                INSERT INTO users (username, full_name, role, password)
+                VALUES ('staff', 'Farm Supervisor', 'staff', 'staff123')
+                ON CONFLICT (username) DO NOTHING
+            """)
+      )
+  else:
+    with sqlite3.connect(SQLITE_PATH) as conn:
+      conn.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    full_name TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    password TEXT NOT NULL
+                )
+            """)
+      conn.execute("""
+                CREATE TABLE IF NOT EXISTS animals (
+                    id_number TEXT PRIMARY KEY,
+                    animal_type TEXT NOT NULL,
+                    room_number TEXT NOT NULL,
+                    date_brought TEXT NOT NULL,
+                    sex TEXT NOT NULL,
+                    cost REAL DEFAULT 0.0,
+                    date_of_birth TEXT,
+                    crossing_date TEXT,
+                    farrow_date TEXT,
+                    status TEXT DEFAULT 'Active',
+                    plan_buy_date TEXT,
+                    plan_sell_date TEXT
+                )
+            """)
+      conn.execute("""
+                CREATE TABLE IF NOT EXISTS feed_and_mortality (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    animal_type TEXT NOT NULL,
+                    room_number TEXT NOT NULL,
+                    id_number TEXT,
+                    feed_type TEXT NOT NULL,
+                    food_type TEXT NOT NULL,
+                    food_quantity_of_what TEXT,
+                    quantity REAL DEFAULT 0.0,
+                    unit_cost REAL DEFAULT 0.0,
+                    total_cost REAL DEFAULT 0.0,
+                    date_recorded TEXT NOT NULL,
+                    date_finish TEXT,
+                    mortality_count INTEGER DEFAULT 0,
+                    mortality_of_what TEXT,
+                    death_count INTEGER DEFAULT 0,
+                    death_of_what TEXT,
+                    date_of_mortality TEXT,
+                    date_of_death TEXT,
+                    other_expenses REAL DEFAULT 0.0
+                )
+            """)
+      existing_cols = {
+          row[1]
+          for row in conn.execute("PRAGMA table_info(feed_and_mortality)").fetchall()
+      }
+      migrations = {
+          "food_quantity_of_what": "ALTER TABLE feed_and_mortality ADD COLUMN food_quantity_of_what TEXT",
+          "mortality_of_what": "ALTER TABLE feed_and_mortality ADD COLUMN mortality_of_what TEXT",
+          "death_count": "ALTER TABLE feed_and_mortality ADD COLUMN death_count INTEGER DEFAULT 0",
+          "death_of_what": "ALTER TABLE feed_and_mortality ADD COLUMN death_of_what TEXT",
+          "date_of_death": "ALTER TABLE feed_and_mortality ADD COLUMN date_of_death TEXT",
+      }
+      for col_name, ddl in migrations.items():
+        if col_name not in existing_cols:
+          conn.execute(ddl)
+
+      conn.execute("""
+                CREATE TABLE IF NOT EXISTS health_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id_number TEXT NOT NULL,
+                    animal_type TEXT NOT NULL,
+                    room_number TEXT NOT NULL,
+                    visit_date TEXT NOT NULL,
+                    disease TEXT NOT NULL,
+                    medication TEXT NOT NULL,
+                    vet_cost REAL DEFAULT 0.0
+                )
+            """)
+      conn.execute("""
+                CREATE TABLE IF NOT EXISTS inventory_and_sales (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    record_type TEXT NOT NULL,
+                    animal_type TEXT NOT NULL,
+                    id_number TEXT,
+                    item_or_batch TEXT NOT NULL,
+                    quantity REAL DEFAULT 1.0,
+                    unit_price REAL DEFAULT 0.0,
+                    total_amount REAL DEFAULT 0.0,
+                    record_date TEXT NOT NULL,
+                    plan_buy_time TEXT,
+                    plan_sell_time TEXT
+                )
+            """)
+      conn.execute("""
+                CREATE TABLE IF NOT EXISTS workers (
+                    worker_id TEXT PRIMARY KEY,
+                    full_name TEXT NOT NULL,
+                    role TEXT,
+                    pay_cycle TEXT NOT NULL,
+                    pay_rate REAL DEFAULT 0.0,
+                    credit_owed REAL DEFAULT 0.0,
+                    loan_balance REAL DEFAULT 0.0
+                )
+            """)
+      conn.execute("""
+                CREATE TABLE IF NOT EXISTS worker_finance_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    worker_id TEXT NOT NULL,
+                    worker_name TEXT NOT NULL,
+                    action_type TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    entry_date TEXT NOT NULL,
+                    notes TEXT
+                )
+            """)
+      conn.execute("""
+                CREATE TABLE IF NOT EXISTS farm_loans (
+                    loan_id TEXT PRIMARY KEY,
+                    lender_name TEXT NOT NULL,
+                    principal_amount REAL NOT NULL,
+                    amount_paid REAL DEFAULT 0.0,
+                    balance_due REAL NOT NULL,
+                    date_taken TEXT NOT NULL,
+                    notes TEXT
+                )
+            """)
+      conn.execute("""
+                INSERT OR IGNORE INTO users (username, full_name, role, password)
+                VALUES ('admin', 'Farm Administrator', 'admin', 'admin123')
+            """)
+      conn.execute("""
+                INSERT OR IGNORE INTO users (username, full_name, role, password)
+                VALUES ('staff', 'Farm Supervisor', 'staff', 'staff123')
+            """)
+
+
+def _convert_sql_and_params(query, params, pg_mode):
+  if not pg_mode:
+    return query, params
+  parts = query.split("?")
+  if len(parts) == 1:
+    return query, params
+  bind_params = {}
+  rebuilt = [parts[0]]
+  for idx, val in enumerate(params):
+    key = f"p{idx}"
+    bind_params[key] = val
+    rebuilt.append(f":{key}{parts[idx + 1]}")
+  return "".join(rebuilt), bind_params
+
+
+def read_df(engine, query, params=()):
+  pg_mode = use_postgres(engine)
+  sql_str, bind_vals = _convert_sql_and_params(query, params, pg_mode)
+  if pg_mode:
+    with engine.connect() as conn:
+      return pd.read_sql(sqlalchemy.text(sql_str), conn, params=bind_vals)
+  with sqlite3.connect(SQLITE_PATH) as conn:
+    return pd.read_sql(sql_str, conn, params=params)
+
+
+def exec_sql(engine, query, params=()):
+  pg_mode = use_postgres(engine)
+  sql_str, bind_vals = _convert_sql_and_params(query, params, pg_mode)
+  if pg_mode:
+    with engine.begin() as conn:
+      conn.execute(sqlalchemy.text(sql_str), bind_vals)
+  else:
+    with sqlite3.connect(SQLITE_PATH) as conn:
+      conn.execute(sql_str, params)
+      conn.commit()
+
+
+def authenticate_user(engine, username, password):
   df = read_df(
+      engine,
       "SELECT id, username, full_name, role, password FROM users WHERE LOWER(username) = LOWER(?)",
       (username.strip(),),
   )
@@ -188,7 +518,8 @@ def calc_days_spent_and_left(start_str, finish_str):
   return days_spent, days_left
 
 
-init_db()
+pg_engine, db_status_msg = get_pg_engine()
+init_db(pg_engine)
 
 if "farm_user" not in st.session_state:
   st.session_state.farm_user = None
@@ -200,6 +531,10 @@ def render_sign_in():
       "Sign in with your Admin or Staff credentials to manage livestock, feed, "
       "health, inventory, sales, workers, and loans."
   )
+  if use_postgres(pg_engine):
+    st.success(f"🟢 {db_status_msg}")
+  else:
+    st.warning(f"🟡 {db_status_msg}")
 
   tab_admin, tab_staff = st.tabs(["🛡️ Admin Sign In", "👤 Staff Sign In"])
 
@@ -210,7 +545,7 @@ def render_sign_in():
       adm_user = st.text_input("Admin Username", value="admin").strip()
       adm_pass = st.text_input("Admin Password", type="password").strip()
       if st.form_submit_button("Sign In as Admin", type="primary"):
-        auth = authenticate_user(adm_user, adm_pass)
+        auth = authenticate_user(pg_engine, adm_user, adm_pass)
         if auth and auth["role"] == "admin":
           st.session_state.farm_user = auth
           st.success(f"Welcome, {auth['full_name']}!")
@@ -227,7 +562,7 @@ def render_sign_in():
       stf_user = st.text_input("Staff Username", value="staff").strip()
       stf_pass = st.text_input("Staff Password", type="password").strip()
       if st.form_submit_button("Sign In as Staff", type="primary"):
-        auth = authenticate_user(stf_user, stf_pass)
+        auth = authenticate_user(pg_engine, stf_user, stf_pass)
         if auth:
           st.session_state.farm_user = auth
           st.success(f"Welcome, {auth['full_name']}!")
@@ -246,17 +581,16 @@ is_admin = current_user["role"] == "admin"
 st.title("🐄 Animal Farm Management System")
 st.caption(
     f"Signed in as **{current_user['full_name']}** (`{current_user['role'].upper()}`) — "
-    "Livestock registry, breeding, feed/mortality, health, inventory, sales/P&L, and worker/farm loans."
+    "Livestock registry, breeding, feed/mortality/death, health, inventory, sales/P&L, and worker/farm loans."
 )
 
-# Top Executive Overview Bar
-df_animals = read_df("SELECT * FROM animals")
-df_feed = read_df("SELECT * FROM feed_and_mortality")
-df_health = read_df("SELECT * FROM health_logs")
-df_inv_sales = read_df("SELECT * FROM inventory_and_sales")
-df_workers = read_df("SELECT * FROM workers")
-df_w_logs = read_df("SELECT * FROM worker_finance_logs")
-df_farm_loans = read_df("SELECT * FROM farm_loans")
+df_animals = read_df(pg_engine, "SELECT * FROM animals")
+df_feed = read_df(pg_engine, "SELECT * FROM feed_and_mortality")
+df_health = read_df(pg_engine, "SELECT * FROM health_logs")
+df_inv_sales = read_df(pg_engine, "SELECT * FROM inventory_and_sales")
+df_workers = read_df(pg_engine, "SELECT * FROM workers")
+df_w_logs = read_df(pg_engine, "SELECT * FROM worker_finance_logs")
+df_farm_loans = read_df(pg_engine, "SELECT * FROM farm_loans")
 
 total_animals = len(df_animals)
 total_animal_cost = (
@@ -318,13 +652,18 @@ k5.metric(
 
 st.sidebar.markdown(f"**User:** {current_user['full_name']}")
 st.sidebar.markdown(f"**Role:** `{current_user['role'].upper()}`")
+if use_postgres(pg_engine):
+  st.sidebar.success(f"🟢 {db_status_msg}")
+else:
+  st.sidebar.warning(f"🟡 {db_status_msg}")
+
 if st.sidebar.button("🚪 Sign Out"):
   st.session_state.farm_user = None
   st.rerun()
 
 nav_sections = [
     "🐾 Animals & Categories",
-    "🌾 Feed, Mortality & Days",
+    "🌾 Feed, Mortality, Death & Days",
     "🩺 Health & Medication",
     "📦 Inventory, Planning & Sales/P&L",
     "👷 Workers: Pay, Credit & Loans",
@@ -336,18 +675,34 @@ if is_admin:
 nav = st.sidebar.radio("Farm Sections", nav_sections)
 
 # ---------------------------------------------------------
-# 1. ANIMALS REGISTERED & CATEGORY TOTALS
+# 1. ANIMALS REGISTERED & CATEGORY TOTALS + ANIMAL PICTURES
 # ---------------------------------------------------------
 if nav == "🐾 Animals & Categories":
-  st.subheader("🐾 Register Animals & Category Totals")
+  st.subheader("🐾 Register Animals, Animal Pictures & Category Totals")
+  st.caption("All fields are optional—fill in whatever details you have.")
+
+  selected_preview_type = st.selectbox(
+      "Preview Animal Type Picture", ANIMAL_CATEGORIES, key="animal_pic_preview"
+  )
+  pic_cols = st.columns([1, 2])
+  with pic_cols[0]:
+    st.image(
+        ANIMAL_IMAGES.get(selected_preview_type, ANIMAL_IMAGES["Other Livestock"]),
+        caption=selected_preview_type,
+        use_container_width=True,
+    )
+  with pic_cols[1]:
+    st.markdown(f"### {selected_preview_type}")
+    st.write(
+        "Use the form below to register individual animals or batches. No field is "
+        "strictly required—defaults will be filled automatically if left blank."
+    )
 
   with st.form("register_animal_form", clear_on_submit=True):
     c1, c2, c3, c4 = st.columns(4)
     animal_type = c1.selectbox("Animal Type", ANIMAL_CATEGORIES)
-    room_number = c2.text_input("Animal Room / Pen Number", placeholder="Pen-01").strip()
-    id_number = c3.text_input(
-        "ID Number (leave blank for auto ID)", placeholder="ANM-101"
-    ).strip()
+    room_number = c2.text_input("Animal Room / Pen Number (optional)", placeholder="Pen-01").strip()
+    id_number = c3.text_input("ID Number (optional)", placeholder="ANM-101").strip()
     sex = c4.selectbox("Sex", ["Female", "Male", "Mixed Batch"])
 
     c5, c6, c7, c8 = st.columns(4)
@@ -363,40 +718,48 @@ if nav == "🐾 Animals & Categories":
 
     if st.form_submit_button("Save Animal Record", type="primary"):
       final_id = id_number if id_number else f"ANM-{uuid.uuid4().hex[:6].upper()}"
-      if not room_number:
-        st.warning("Please enter the Animal Room / Pen Number.")
-      else:
-        try:
-          exec_sql(
-              """
-                            INSERT INTO animals (
-                                id_number, animal_type, room_number, date_brought,
-                                sex, cost, date_of_birth, crossing_date, farrow_date,
-                                plan_buy_date, plan_sell_date
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-              (
-                  final_id,
-                  animal_type,
-                  room_number,
-                  str(date_brought),
-                  sex,
-                  float(cost),
-                  str(date_of_birth),
-                  str(crossing_date),
-                  str(farrow_date),
-                  str(plan_buy_date),
-                  str(plan_sell_date),
-              ),
-          )
-          st.success(f"Registered {animal_type} with ID `{final_id}` in `{room_number}`.")
-          st.rerun()
-        except sqlite3.IntegrityError:
-          st.error(f"ID Number `{final_id}` already exists. Use a unique ID.")
+      final_room = room_number if room_number else "Unassigned"
+      try:
+        exec_sql(
+            pg_engine,
+            """
+                        INSERT INTO animals (
+                            id_number, animal_type, room_number, date_brought,
+                            sex, cost, date_of_birth, crossing_date, farrow_date,
+                            plan_buy_date, plan_sell_date
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+            (
+                final_id,
+                animal_type,
+                final_room,
+                str(date_brought),
+                sex,
+                float(cost),
+                str(date_of_birth),
+                str(crossing_date),
+                str(farrow_date),
+                str(plan_buy_date),
+                str(plan_sell_date),
+            ),
+        )
+        st.success(f"Registered {animal_type} with ID `{final_id}` in `{final_room}`.")
+        st.rerun()
+      except Exception as exc:
+        st.error(f"Could not save animal record: {exc}")
+
+  st.markdown("---")
+  st.subheader("🖼️ Animal Category Gallery")
+  gallery_cols = st.columns(4)
+  for idx, cat in enumerate(ANIMAL_CATEGORIES):
+    with gallery_cols[idx % 4]:
+      st.image(
+          ANIMAL_IMAGES[cat], caption=cat, use_container_width=True
+      )
 
   st.markdown("---")
   st.subheader("📊 Totals by Animal Category")
-  df_animals = read_df("SELECT * FROM animals")
+  df_animals = read_df(pg_engine, "SELECT * FROM animals")
   if not df_animals.empty:
     cat_summary = (
         df_animals.groupby("animal_type")
@@ -414,39 +777,72 @@ if nav == "🐾 Animals & Categories":
     st.info("No animals registered yet.")
 
 # ---------------------------------------------------------
-# 2. FEED, MORTALITY / DEATH, DAYS SPENT / LEFT & EXPENSES
+# 2. FEED, SEPARATE MORTALITY vs DEATH, QUANTITY DROPDOWN + TYPE, "OF WHAT?"
 # ---------------------------------------------------------
-elif nav == "🌾 Feed, Mortality & Days":
-  st.subheader("🌾 Feed / Food, Mortality, Days Spent & Days Left")
+elif nav == "🌾 Feed, Mortality, Death & Days":
+  st.subheader("🌾 Feed / Food, Separate Mortality & Death, Days Spent & Days Left")
+  st.caption("No fields are required. Select or type quantities, specify 'of what?', and log mortality separately from death.")
 
   with st.form("feed_mortality_form", clear_on_submit=True):
     c1, c2, c3, c4 = st.columns(4)
     a_type = c1.selectbox("Animal Type", ANIMAL_CATEGORIES)
-    room_no = c2.text_input("Animal Room Number", placeholder="Pen-01").strip()
+    room_no = c2.text_input("Animal Room Number (optional)", placeholder="Pen-01").strip()
     anim_id = c3.text_input("Animal / Batch ID Number (optional)").strip()
-    feed_type = c4.text_input("Feed Type", placeholder="Starter Mash").strip()
+    feed_type = c4.text_input("Feed Type (optional)", placeholder="Starter Mash").strip()
 
-    c5, c6, c7, c8 = st.columns(4)
-    food_type = c5.text_input("Food Type / Supplement", placeholder="Cassava / Maize").strip()
-    qty = c6.number_input("Quantity", min_value=0.0, step=1.0)
-    unit_cost = c7.number_input("Price / Cost per Unit", min_value=0.0, step=1.0)
-    other_exp = c8.number_input("Other Expenses", min_value=0.0, step=1.0)
+    c5, c6, c7 = st.columns(3)
+    food_type = c5.text_input("Food Type / Supplement (optional)", placeholder="Cassava / Maize").strip()
+    food_of_what = c6.text_input(
+        "Food Type Quantity — of what? (optional)",
+        placeholder="e.g., 50kg bags of maize, crates, buckets",
+    ).strip()
+    other_exp = c7.number_input("Other Expenses (optional)", min_value=0.0, step=1.0)
 
-    c9, c10, c11, c12 = st.columns(4)
+    st.markdown("**Quantity & Unit Cost (Dropdown quick select + exact typed number)**")
+    qty = quantity_selector("Quantity", "feed_qty", default_preset=10, min_val=0.0, step=1.0)
+    unit_cost = quantity_selector("Price / Cost per Unit", "feed_unit_cost", default_preset=10, min_val=0.0, step=1.0)
+
+    st.markdown("---")
+    st.markdown("**Separate Mortality & Death Tracking**")
+    m_col1, m_col2, m_col3 = st.columns(3)
+    mort_cnt = int(
+        quantity_selector("Mortality Count", "mort_cnt", default_preset=1, min_val=0.0, step=1.0)
+    )
+    mort_of_what = m_col1.text_input(
+        "Mortality — of what? (optional)",
+        placeholder="e.g., piglets, chicks, batch #2",
+    ).strip()
+    mort_date = m_col2.date_input("Date of Mortality", value=date.today())
+    m_col3.write("")
+
+    d_col1, d_col2, d_col3 = st.columns(3)
+    death_cnt = int(
+        quantity_selector("Death Count", "death_cnt", default_preset=1, min_val=0.0, step=1.0)
+    )
+    death_of_what = d_col1.text_input(
+        "Death — of what? (optional)",
+        placeholder="e.g., adult sow, goat kid, culling/accident",
+    ).strip()
+    death_date = d_col2.date_input("Date of Death", value=date.today())
+    d_col3.write("")
+
+    st.markdown("---")
+    c9, c10 = st.columns(2)
     date_rec = c9.date_input("Date Recorded / Brought", value=date.today())
     date_fin = c10.date_input("Date Finish (Expected)", value=date.today())
-    mort_cnt = c11.number_input("Mortality / Death Count", min_value=0, step=1)
-    mort_date = c12.date_input("Date of Mortality / Death", value=date.today())
 
-    if st.form_submit_button("Save Feed & Mortality Record", type="primary"):
+    if st.form_submit_button("Save Feed, Mortality & Death Record", type="primary"):
       computed_total = float(qty) * float(unit_cost)
       exec_sql(
+          pg_engine,
           """
                 INSERT INTO feed_and_mortality (
                     animal_type, room_number, id_number, feed_type, food_type,
-                    quantity, unit_cost, total_cost, date_recorded, date_finish,
-                    mortality_count, date_of_mortality, other_expenses
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    food_quantity_of_what, quantity, unit_cost, total_cost,
+                    date_recorded, date_finish, mortality_count, mortality_of_what,
+                    death_count, death_of_what, date_of_mortality, date_of_death,
+                    other_expenses
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
           (
               a_type,
@@ -454,20 +850,25 @@ elif nav == "🌾 Feed, Mortality & Days":
               anim_id,
               feed_type or "Standard Feed",
               food_type or feed_type or "Standard Food",
+              food_of_what,
               float(qty),
               float(unit_cost),
               computed_total,
               str(date_rec),
               str(date_fin),
               int(mort_cnt),
+              mort_of_what,
+              int(death_cnt),
+              death_of_what,
               str(mort_date),
+              str(death_date),
               float(other_exp),
           ),
       )
-      st.success("Feed, days & mortality record saved.")
+      st.success("Feed, mortality, death, and days record saved.")
       st.rerun()
 
-  df_feed = read_df("SELECT * FROM feed_and_mortality ORDER BY id DESC")
+  df_feed = read_df(pg_engine, "SELECT * FROM feed_and_mortality ORDER BY id DESC")
   if not df_feed.empty:
     days_spent_list = []
     days_left_list = []
@@ -479,51 +880,50 @@ elif nav == "🌾 Feed, Mortality & Days":
     df_feed["days_left"] = days_left_list
     st.dataframe(df_feed, use_container_width=True, hide_index=True)
   else:
-    st.info("No feed or mortality logs yet.")
+    st.info("No feed, mortality, or death logs yet.")
 
 # ---------------------------------------------------------
 # 3. HEALTH, VISIT DATE, DISEASE & ANIMAL MEDICATION
 # ---------------------------------------------------------
 elif nav == "🩺 Health & Medication":
   st.subheader("🩺 Vet Visits, Diseases & Animal Medication")
+  st.caption("No fields are required—leave any field blank if not yet known.")
 
   with st.form("health_form", clear_on_submit=True):
     c1, c2, c3, c4 = st.columns(4)
-    h_id = c1.text_input("Animal ID Number", placeholder="ANM-101").strip()
+    h_id = c1.text_input("Animal ID Number (optional)", placeholder="ANM-101").strip()
     h_type = c2.selectbox("Animal Type", ANIMAL_CATEGORIES)
-    h_room = c3.text_input("Room Number", placeholder="Pen-01").strip()
+    h_room = c3.text_input("Room Number (optional)", placeholder="Pen-01").strip()
     visit_dt = c4.date_input("Visit Date", value=date.today())
 
     c5, c6, c7 = st.columns(3)
-    disease = c5.text_input("What Disease / Condition?", placeholder="Swine Fever / Deworming").strip()
-    medication = c6.text_input("Animal Medication Given", placeholder="Oxytetracycline").strip()
-    vet_cost = c7.number_input("Medication / Visit Cost", min_value=0.0, step=1.0)
+    disease = c5.text_input("What Disease / Condition? (optional)", placeholder="Swine Fever / Deworming").strip()
+    medication = c6.text_input("Animal Medication Given (optional)", placeholder="Oxytetracycline").strip()
+    vet_cost = c7.number_input("Medication / Visit Cost (optional)", min_value=0.0, step=1.0)
 
     if st.form_submit_button("Save Health Record", type="primary"):
-      if not h_id or not disease or not medication:
-        st.warning("Please fill in Animal ID, Disease, and Medication.")
-      else:
-        exec_sql(
-            """
-                    INSERT INTO health_logs (
-                        id_number, animal_type, room_number, visit_date,
-                        disease, medication, vet_cost
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
-            (
-                h_id,
-                h_type,
-                h_room or "General",
-                str(visit_dt),
-                disease,
-                medication,
-                float(vet_cost),
-            ),
-        )
-        st.success("Health and medication record saved.")
-        st.rerun()
+      exec_sql(
+          pg_engine,
+          """
+                INSERT INTO health_logs (
+                    id_number, animal_type, room_number, visit_date,
+                    disease, medication, vet_cost
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+          (
+              h_id or "General",
+              h_type,
+              h_room or "General",
+              str(visit_dt),
+              disease or "Unspecified",
+              medication or "None / Pending",
+              float(vet_cost),
+          ),
+      )
+      st.success("Health and medication record saved.")
+      st.rerun()
 
-  df_health = read_df("SELECT * FROM health_logs ORDER BY id DESC")
+  df_health = read_df(pg_engine, "SELECT * FROM health_logs ORDER BY id DESC")
   if not df_health.empty:
     st.dataframe(df_health, use_container_width=True, hide_index=True)
   else:
@@ -534,26 +934,27 @@ elif nav == "🩺 Health & Medication":
 # ---------------------------------------------------------
 elif nav == "📦 Inventory, Planning & Sales/P&L":
   st.subheader("📦 Inventory, Buy/Sell Planning, Sales & Profit/Loss")
+  st.caption("No fields are required—select or type quantities and prices freely.")
 
   with st.form("inv_sales_form", clear_on_submit=True):
     c1, c2, c3, c4 = st.columns(4)
     rec_type = c1.selectbox("Entry Type", ["Inventory", "Sale"])
     a_type = c2.selectbox("Animal Type", ANIMAL_CATEGORIES)
     anim_id = c3.text_input("Animal / Item ID (optional)").strip()
-    item_desc = c4.text_input("Item / Batch Description", placeholder="Grower Pigs / Feed Bags").strip()
+    item_desc = c4.text_input("Item / Batch Description (optional)", placeholder="Grower Pigs / Feed Bags").strip()
 
-    c5, c6, c7 = st.columns(3)
-    qty = c5.number_input("Quantity", min_value=0.1, value=1.0, step=1.0)
-    unit_price = c6.number_input("Price per Unit", min_value=0.0, step=1.0)
+    qty = quantity_selector("Quantity", "inv_qty", default_preset=1, min_val=0.0, step=1.0)
+    unit_price = quantity_selector("Price per Unit", "inv_price", default_preset=10, min_val=0.0, step=1.0)
+
+    c7, c8, c9 = st.columns(3)
     rec_date = c7.date_input("Transaction Date", value=date.today())
-
-    c8, c9 = st.columns(2)
     plan_buy = c8.date_input("Planning to Buy Time", value=date.today())
     plan_sell = c9.date_input("Planning to Sell Time", value=date.today())
 
     if st.form_submit_button("Save Entry", type="primary"):
       total_val = float(qty) * float(unit_price)
       exec_sql(
+          pg_engine,
           """
                 INSERT INTO inventory_and_sales (
                     record_type, animal_type, id_number, item_or_batch,
@@ -586,7 +987,7 @@ elif nav == "📦 Inventory, Planning & Sales/P&L":
   status_label = "PROFIT" if net_profit_or_loss >= 0 else "LOSS"
   p4.metric(f"Net {status_label}", f"{net_profit_or_loss:,.2f}")
 
-  df_inv_sales = read_df("SELECT * FROM inventory_and_sales ORDER BY id DESC")
+  df_inv_sales = read_df(pg_engine, "SELECT * FROM inventory_and_sales ORDER BY id DESC")
   if not df_inv_sales.empty:
     st.dataframe(df_inv_sales, use_container_width=True, hide_index=True)
   else:
@@ -597,34 +998,34 @@ elif nav == "📦 Inventory, Planning & Sales/P&L":
 # ---------------------------------------------------------
 elif nav == "👷 Workers: Pay, Credit & Loans":
   st.subheader("👷 Workers Registry, Payroll, Credit & Worker Loans")
+  st.caption("No fields are required—defaults will be applied if any field is left blank.")
 
   col_reg, col_act = st.columns(2)
 
   with col_reg:
     st.markdown("#### Register New Worker")
     with st.form("add_worker_form", clear_on_submit=True):
-      w_name = st.text_input("Worker Full Name").strip()
-      w_role = st.text_input("Role / Duty", placeholder="Herdsman / Cleaner").strip()
+      w_name = st.text_input("Worker Full Name (optional)").strip()
+      w_role = st.text_input("Role / Duty (optional)", placeholder="Herdsman / Cleaner").strip()
       w_cycle = st.selectbox("Pay Schedule", ["Daily", "Weekly", "Monthly"])
-      w_rate = st.number_input("Standard Pay Rate", min_value=0.0, step=5.0)
+      w_rate = quantity_selector("Standard Pay Rate", "w_rate", default_preset=20, min_val=0.0, step=5.0)
       if st.form_submit_button("Register Worker", type="primary"):
-        if not w_name:
-          st.warning("Enter worker full name.")
-        else:
-          w_id = f"WRK-{uuid.uuid4().hex[:5].upper()}"
-          exec_sql(
-              """
-                            INSERT INTO workers (worker_id, full_name, role, pay_cycle, pay_rate, credit_owed, loan_balance)
-                            VALUES (?, ?, ?, ?, ?, 0.0, 0.0)
-                            """,
-              (w_id, w_name, w_role or "Farm Worker", w_cycle, float(w_rate)),
-          )
-          st.success(f"Registered worker `{w_name}` ({w_cycle}).")
-          st.rerun()
+        final_w_name = w_name if w_name else f"Worker-{uuid.uuid4().hex[:4].upper()}"
+        w_id = f"WRK-{uuid.uuid4().hex[:5].upper()}"
+        exec_sql(
+            pg_engine,
+            """
+                        INSERT INTO workers (worker_id, full_name, role, pay_cycle, pay_rate, credit_owed, loan_balance)
+                        VALUES (?, ?, ?, ?, ?, 0.0, 0.0)
+                        """,
+            (w_id, final_w_name, w_role or "Farm Worker", w_cycle, float(w_rate)),
+        )
+        st.success(f"Registered worker `{final_w_name}` ({w_cycle}).")
+        st.rerun()
 
   with col_act:
     st.markdown("#### Record Pay, Credit or Worker Loan")
-    df_w = read_df("SELECT * FROM workers ORDER BY full_name ASC")
+    df_w = read_df(pg_engine, "SELECT * FROM workers ORDER BY full_name ASC")
     if not df_w.empty:
       w_map = {
           f"{r['full_name']} ({r['worker_id']}) — {r['pay_cycle']}": r
@@ -642,9 +1043,9 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
                 "Deduct Loan Repayment from Worker",
             ],
         )
-        amt = st.number_input("Amount", min_value=0.01, step=5.0)
+        amt = quantity_selector("Amount", "w_act_amt", default_preset=10, min_val=0.0, step=5.0)
         act_date = st.date_input("Date", value=date.today())
-        notes = st.text_input("Notes / Remarks").strip()
+        notes = st.text_input("Notes / Remarks (optional)").strip()
 
         if st.form_submit_button("Apply Worker Action", type="primary"):
           w_row = w_map[chosen_w_label]
@@ -664,10 +1065,12 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
             cur_loan = max(0.0, cur_loan - val)
 
           exec_sql(
+              pg_engine,
               "UPDATE workers SET credit_owed = ?, loan_balance = ? WHERE worker_id = ?",
               (cur_credit, cur_loan, wid),
           )
           exec_sql(
+              pg_engine,
               """
                             INSERT INTO worker_finance_logs (worker_id, worker_name, action_type, amount, entry_date, notes)
                             VALUES (?, ?, ?, ?, ?, ?)
@@ -680,12 +1083,12 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
       st.info("Register a worker first to record pay, credit, or loans.")
 
   st.markdown("---")
-  df_w_display = read_df("SELECT * FROM workers ORDER BY full_name ASC")
+  df_w_display = read_df(pg_engine, "SELECT * FROM workers ORDER BY full_name ASC")
   if not df_w_display.empty:
     st.subheader("👥 Workers, Credit Owed & Loan Balances")
     st.dataframe(df_w_display, use_container_width=True, hide_index=True)
 
-  df_w_history = read_df("SELECT * FROM worker_finance_logs ORDER BY id DESC")
+  df_w_history = read_df(pg_engine, "SELECT * FROM worker_finance_logs ORDER BY id DESC")
   if not df_w_history.empty:
     st.subheader("🧾 Worker Pay, Credit & Loan History")
     st.dataframe(df_w_history, use_container_width=True, hide_index=True)
@@ -695,34 +1098,34 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
 # ---------------------------------------------------------
 elif nav == "🏦 Farm Loans Taken":
   st.subheader("🏦 Farm Loans Taken & Repayment Tracking")
+  st.caption("No fields are required—defaults will be filled if any field is left blank.")
 
   c_new, c_rep = st.columns(2)
 
   with c_new:
     st.markdown("#### Take a New Farm Loan")
     with st.form("take_loan_form", clear_on_submit=True):
-      lender = st.text_input("Lender / Bank / Institution").strip()
-      principal = st.number_input("Loan Amount Taken", min_value=0.01, step=50.0)
+      lender = st.text_input("Lender / Bank / Institution (optional)").strip()
+      principal = quantity_selector("Loan Amount Taken", "loan_prin", default_preset=100, min_val=0.0, step=50.0)
       taken_date = st.date_input("Date Taken", value=date.today())
-      l_notes = st.text_input("Purpose / Terms").strip()
+      l_notes = st.text_input("Purpose / Terms (optional)").strip()
       if st.form_submit_button("Record Farm Loan", type="primary"):
-        if not lender:
-          st.warning("Please enter the lender name.")
-        else:
-          lid = f"LOAN-{uuid.uuid4().hex[:5].upper()}"
-          exec_sql(
-              """
-                            INSERT INTO farm_loans (loan_id, lender_name, principal_amount, amount_paid, balance_due, date_taken, notes)
-                            VALUES (?, ?, ?, 0.0, ?, ?, ?)
-                            """,
-              (lid, lender, float(principal), float(principal), str(taken_date), l_notes),
-          )
-          st.success(f"Recorded loan `{lid}` from {lender}.")
-          st.rerun()
+        final_lender = lender if lender else "General Lender"
+        lid = f"LOAN-{uuid.uuid4().hex[:5].upper()}"
+        exec_sql(
+            pg_engine,
+            """
+                        INSERT INTO farm_loans (loan_id, lender_name, principal_amount, amount_paid, balance_due, date_taken, notes)
+                        VALUES (?, ?, ?, 0.0, ?, ?, ?)
+                        """,
+            (lid, final_lender, float(principal), float(principal), str(taken_date), l_notes),
+        )
+        st.success(f"Recorded loan `{lid}` from {final_lender}.")
+        st.rerun()
 
   with c_rep:
     st.markdown("#### Record Farm Loan Repayment")
-    df_loans_open = read_df("SELECT * FROM farm_loans WHERE balance_due > 0")
+    df_loans_open = read_df(pg_engine, "SELECT * FROM farm_loans WHERE balance_due > 0")
     if not df_loans_open.empty:
       loan_opts = {
           f"{r['loan_id']} — {r['lender_name']} (Bal: {r['balance_due']:,.2f})": r
@@ -730,12 +1133,13 @@ elif nav == "🏦 Farm Loans Taken":
       }
       with st.form("repay_farm_loan_form", clear_on_submit=True):
         chosen_l = st.selectbox("Select Active Loan", list(loan_opts.keys()))
-        repay_amt = st.number_input("Repayment Amount", min_value=0.01, step=20.0)
+        repay_amt = quantity_selector("Repayment Amount", "loan_repay", default_preset=20, min_val=0.0, step=20.0)
         if st.form_submit_button("Apply Repayment", type="primary"):
           l_row = loan_opts[chosen_l]
           new_paid = float(l_row["amount_paid"] or 0.0) + float(repay_amt)
           new_bal = max(0.0, float(l_row["balance_due"] or 0.0) - float(repay_amt))
           exec_sql(
+              pg_engine,
               "UPDATE farm_loans SET amount_paid = ?, balance_due = ? WHERE loan_id = ?",
               (new_paid, new_bal, l_row["loan_id"]),
           )
@@ -745,7 +1149,7 @@ elif nav == "🏦 Farm Loans Taken":
       st.info("No active unpaid farm loans.")
 
   st.markdown("---")
-  df_all_loans = read_df("SELECT * FROM farm_loans ORDER BY date_taken DESC")
+  df_all_loans = read_df(pg_engine, "SELECT * FROM farm_loans ORDER BY date_taken DESC")
   if not df_all_loans.empty:
     st.dataframe(df_all_loans, use_container_width=True, hide_index=True)
   else:
@@ -760,30 +1164,31 @@ elif nav == "🛡️ Admin User & Password Control":
     st.stop()
 
   st.subheader("🛡️ Admin User Management & Password Reset")
-  df_users = read_df("SELECT id, username, full_name, role FROM users ORDER BY id ASC")
+  df_users = read_df(pg_engine, "SELECT id, username, full_name, role FROM users ORDER BY id ASC")
   st.dataframe(df_users, use_container_width=True, hide_index=True)
 
   c_add, c_pwd = st.columns(2)
   with c_add:
     st.markdown("#### Create New User Account")
     with st.form("create_farm_user_form", clear_on_submit=True):
-      u_name = st.text_input("Username").strip()
-      u_full = st.text_input("Full Name").strip()
+      u_name = st.text_input("Username (optional)").strip()
+      u_full = st.text_input("Full Name (optional)").strip()
       u_role = st.selectbox("Role", ["staff", "admin"])
-      u_pass = st.text_input("Initial Password", type="password").strip()
+      u_pass = st.text_input("Initial Password (optional)", type="password").strip()
       if st.form_submit_button("Create Account", type="primary"):
-        if not u_name or not u_full or not u_pass:
-          st.warning("Please complete username, full name, and password.")
-        else:
-          try:
-            exec_sql(
-                "INSERT INTO users (username, full_name, role, password) VALUES (?, ?, ?, ?)",
-                (u_name, u_full, u_role, u_pass),
-            )
-            st.success(f"Created {u_role} account `{u_name}`.")
-            st.rerun()
-          except sqlite3.IntegrityError:
-            st.error(f"Username `{u_name}` already exists.")
+        final_u = u_name if u_name else f"user_{uuid.uuid4().hex[:4]}"
+        final_full = u_full if u_full else final_u
+        final_pass = u_pass if u_pass else "changeme123"
+        try:
+          exec_sql(
+              pg_engine,
+              "INSERT INTO users (username, full_name, role, password) VALUES (?, ?, ?, ?)",
+              (final_u, final_full, u_role, final_pass),
+          )
+          st.success(f"Created {u_role} account `{final_u}`.")
+          st.rerun()
+        except Exception as exc:
+          st.error(f"Could not create user: {exc}")
 
   with c_pwd:
     st.markdown("#### Reset User Password")
@@ -792,9 +1197,11 @@ elif nav == "🛡️ Admin User & Password Control":
         target_u = st.selectbox("Select User", df_users["username"].tolist())
         new_p = st.text_input("New Password", type="password").strip()
         if st.form_submit_button("Update Password", type="primary"):
-          if not new_p:
-            st.warning("Enter a new password.")
-          else:
-            exec_sql("UPDATE users SET password = ? WHERE username = ?", (new_p, target_u))
-            st.success(f"Password updated for `{target_u}`.")
-            st.rerun()
+          final_new_p = new_p if new_p else "changeme123"
+          exec_sql(
+              pg_engine,
+              "UPDATE users SET password = ? WHERE username = ?",
+              (final_new_p, target_u),
+          )
+          st.success(f"Password updated for `{target_u}`.")
+          st.rerun()
