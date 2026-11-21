@@ -54,7 +54,6 @@ ANIMAL_IMAGES = {
     ),
 }
 
-# Species-specific dynamic defaults, labels, feeds, products, diseases & medications
 ANIMAL_PROFILES = {
     "Pigs / Swine": {
         "housing_label": "Pigsty / Pen Number",
@@ -243,7 +242,7 @@ def inject_farm_theme(is_login_screen=False):
   bg_overlay = (
       "linear-gradient(rgba(14, 28, 18, 0.72), rgba(14, 28, 18, 0.78))"
       if is_login_screen
-      else "linear-gradient(rgba(244, 248, 243, 0.92), rgba(238, 245, 236, 0.94))"
+      else "linear-gradient(rgba(244, 248, 243, 0.94), rgba(238, 245, 236, 0.96))"
   )
   st.markdown(
       f"""
@@ -267,11 +266,11 @@ def inject_farm_theme(is_login_screen=False):
           border-radius: 12px !important;
       }}
       .dp-login-banner {{
-          background: rgba(255, 255, 255, 0.96);
+          background: rgba(255, 255, 255, 0.97);
           border-left: 8px solid #2e7d32;
           padding: 1.4rem 1.8rem;
           border-radius: 14px;
-          box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+          box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25);
           margin-bottom: 1.2rem;
           color: #142818;
       }}
@@ -288,11 +287,11 @@ def inject_farm_theme(is_login_screen=False):
           font-weight: 500 !important;
       }}
       div[data-testid="stForm"] {{
-          background: rgba(255, 255, 255, 0.97) !important;
+          background: rgba(255, 255, 255, 0.98) !important;
           padding: 1.4rem 1.6rem !important;
           border-radius: 14px !important;
           border: 1px solid #c8e6c9 !important;
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14) !important;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
       }}
       div[data-testid="stForm"] label,
       div[data-testid="stForm"] p,
@@ -311,6 +310,29 @@ def inject_farm_theme(is_login_screen=False):
           border: 1.5px solid #81c784 !important;
           border-radius: 8px !important;
       }}
+      /* Ensure date inputs & calendar popups are always crisp and visible */
+      div[data-testid="stDateInput"] input {{
+          background-color: #ffffff !important;
+          color: #111111 !important;
+          -webkit-text-fill-color: #111111 !important;
+          opacity: 1 !important;
+          border: 1.5px solid #2e7d32 !important;
+          border-radius: 8px !important;
+          font-weight: 600 !important;
+      }}
+      div[data-testid="stDateInput"] div[data-baseweb="input"] {{
+          background-color: #ffffff !important;
+          color: #111111 !important;
+          border: 1.5px solid #2e7d32 !important;
+          border-radius: 8px !important;
+      }}
+      div[data-baseweb="calendar"] {{
+          background-color: #ffffff !important;
+          color: #111111 !important;
+      }}
+      div[data-baseweb="calendar"] * {{
+          color: #111111 !important;
+      }}
       div[data-baseweb="tab-list"] {{
           background: rgba(255, 255, 255, 0.95);
           padding: 0.4rem 0.6rem;
@@ -322,7 +344,7 @@ def inject_farm_theme(is_login_screen=False):
           font-weight: 700 !important;
       }}
       section[data-testid="stSidebar"] {{
-          background-color: rgba(24, 48, 30, 0.96) !important;
+          background-color: rgba(24, 48, 30, 0.97) !important;
       }}
       section[data-testid="stSidebar"] * {{
           color: #f1f8e9 !important;
@@ -340,6 +362,14 @@ def render_uniform_image(url, caption="", hero=False):
   st.markdown("</div>", unsafe_allow_html=True)
 
 
+def date_input_with_display(label, key_prefix, default_date=None):
+  """Renders a standard date picker plus a guaranteed high-contrast readable date readout/picker."""
+  init_dt = default_date if isinstance(default_date, date) else date.today()
+  chosen_dt = st.date_input(label, value=init_dt, key=f"{key_prefix}_dt")
+  st.caption(f"Selected Date: **{chosen_dt.strftime('%Y-%m-%d')}**")
+  return chosen_dt
+
+
 def editable_text_dropdown(
     label,
     options,
@@ -348,7 +378,6 @@ def editable_text_dropdown(
     default_blank=False,
     container=None,
 ):
-  """Hybrid dropdown + free-text input: manager can pick a preset OR type any custom value."""
   target = container if container is not None else st
   clean_opts = [str(o) for o in options if str(o).strip()]
   dropdown_list = (
@@ -844,12 +873,32 @@ def calc_days_spent_and_left(start_str, finish_str):
 pg_engine, db_status_msg = get_pg_engine()
 init_db(pg_engine)
 
+NAV_SECTIONS_BASE = [
+    "🏡 Farm Overview & Gallery",
+    "🐾 Animals & Categories",
+    "🥛 Animal Products & Performance",
+    "🌾 Feed, Mortality, Death & Days",
+    "🩺 Health & Medication",
+    "📦 Inventory, Planning & Sales/P&L",
+    "👷 Workers: Pay, Credit & Loans",
+    "🏦 Farm Loans Taken",
+]
+NAV_SECTIONS_ADMIN = NAV_SECTIONS_BASE + ["🛡️ Admin User & Password Control"]
+
 if "farm_user" not in st.session_state:
   st.session_state.farm_user = None
 if "selected_animal_type" not in st.session_state:
   st.session_state.selected_animal_type = ANIMAL_CATEGORIES[0]
-if "nav_section" not in st.session_state:
-  st.session_state.nav_section = "🏡 Farm Overview & Gallery"
+if "active_page" not in st.session_state:
+  st.session_state.active_page = NAV_SECTIONS_BASE[0]
+if "pending_page_jump" in st.session_state and st.session_state.pending_page_jump:
+  st.session_state.active_page = st.session_state.pending_page_jump
+  st.session_state.pending_page_jump = None
+
+
+def request_navigation(target_page):
+  st.session_state.pending_page_jump = target_page
+  st.rerun()
 
 
 def render_sign_in():
@@ -888,6 +937,7 @@ def render_sign_in():
           auth = authenticate_user(pg_engine, adm_user, adm_pass)
           if auth and auth["role"] == "admin":
             st.session_state.farm_user = auth
+            st.session_state.active_page = NAV_SECTIONS_BASE[0]
             st.success(f"Welcome to D&P FARMS, {auth['full_name']}!")
             st.rerun()
           elif auth:
@@ -908,6 +958,7 @@ def render_sign_in():
           auth = authenticate_user(pg_engine, stf_user, stf_pass)
           if auth:
             st.session_state.farm_user = auth
+            st.session_state.active_page = NAV_SECTIONS_BASE[0]
             st.success(f"Welcome to D&P FARMS, {auth['full_name']}!")
             st.rerun()
           else:
@@ -922,12 +973,16 @@ inject_farm_theme(is_login_screen=False)
 
 current_user = st.session_state.farm_user
 is_admin = current_user["role"] == "admin"
+allowed_pages = NAV_SECTIONS_ADMIN if is_admin else NAV_SECTIONS_BASE
+
+if st.session_state.active_page not in allowed_pages:
+  st.session_state.active_page = allowed_pages[0]
 
 st.markdown(
     f"""
     <div class="dp-login-banner">
         <h1>🐄 D&amp;P FARMS — Management System</h1>
-        <p>Signed in as <strong>{current_user['full_name']}</strong> ({current_user['role'].upper()}) — Dynamic Species-Adaptive Entries &amp; Hybrid Presets/Custom Typing.</p>
+        <p>Signed in as <strong>{current_user['full_name']}</strong> ({current_user['role'].upper()}) — Dynamic Species-Adaptive Entries, Visible Dates &amp; Hybrid Presets/Custom Typing.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -1012,23 +1067,18 @@ if st.sidebar.button("🚪 Sign Out"):
   st.session_state.farm_user = None
   st.rerun()
 
-nav_sections = [
-    "🏡 Farm Overview & Gallery",
-    "🐾 Animals & Categories",
-    "🥛 Animal Products & Performance",
-    "🌾 Feed, Mortality, Death & Days",
-    "🩺 Health & Medication",
-    "📦 Inventory, Planning & Sales/P&L",
-    "👷 Workers: Pay, Credit & Loans",
-    "🏦 Farm Loans Taken",
-]
-if is_admin:
-  nav_sections.append("🛡️ Admin User & Password Control")
+# Use a distinct widget key so mutating active_page never triggers StreamlitWidgetAlreadyInstantiatedError
+sidebar_choice = st.sidebar.radio(
+    "D&P FARMS Pages",
+    allowed_pages,
+    index=allowed_pages.index(st.session_state.active_page),
+    key="dp_sidebar_page_radio",
+)
+if sidebar_choice != st.session_state.active_page:
+  st.session_state.active_page = sidebar_choice
+  st.rerun()
 
-if st.session_state.nav_section not in nav_sections:
-  st.session_state.nav_section = nav_sections[0]
-
-nav = st.sidebar.radio("D&P FARMS Pages", nav_sections, key="nav_section")
+nav = st.session_state.active_page
 
 
 def get_ids_for_animal_type(a_type):
@@ -1084,8 +1134,7 @@ if nav == "🏡 Farm Overview & Gallery":
           type="primary",
       ):
         st.session_state.selected_animal_type = cat
-        st.session_state.nav_section = "🐾 Animals & Categories"
-        st.rerun()
+        request_navigation("🐾 Animals & Categories")
 
   st.markdown("---")
   ov1, ov2 = st.columns(2)
@@ -1149,7 +1198,6 @@ elif nav == "🐾 Animals & Categories":
         st.rerun()
 
   st.markdown("---")
-  # Live selector outside form so changing animal immediately refreshes all dependent fields!
   sel_col1, sel_col2 = st.columns([1, 2])
   with sel_col1:
     chosen_cat = st.selectbox(
@@ -1202,14 +1250,32 @@ elif nav == "🐾 Animals & Categories":
       cost = c4.number_input("Purchase / Acquisition Cost", min_value=0.0, step=10.0)
 
       c5, c6, c7, c8 = st.columns(4)
-      date_brought = c5.date_input("Date Brought", value=date.today())
-      date_of_birth = c6.date_input("Date of Birth / Hatch", value=date.today())
-      crossing_date = c7.date_input(prof["repro_event_label"], value=date.today())
-      farrow_date = c8.date_input(prof["birth_event_label"], value=date.today())
+      with c5:
+        date_brought = date_input_with_display(
+            "Date Brought", f"dt_brought_{active_cat}", date.today()
+        )
+      with c6:
+        date_of_birth = date_input_with_display(
+            "Date of Birth / Hatch", f"dt_dob_{active_cat}", date.today()
+        )
+      with c7:
+        crossing_date = date_input_with_display(
+            prof["repro_event_label"], f"dt_cross_{active_cat}", date.today()
+        )
+      with c8:
+        farrow_date = date_input_with_display(
+            prof["birth_event_label"], f"dt_farrow_{active_cat}", date.today()
+        )
 
       c9, c10 = st.columns(2)
-      plan_buy_date = c9.date_input("Planning to Buy Time", value=date.today())
-      plan_sell_date = c10.date_input("Planning to Sell Time", value=date.today())
+      with c9:
+        plan_buy_date = date_input_with_display(
+            "Planning to Buy Time", f"dt_pbuy_{active_cat}", date.today()
+        )
+      with c10:
+        plan_sell_date = date_input_with_display(
+            "Planning to Sell Time", f"dt_psell_{active_cat}", date.today()
+        )
 
       if st.form_submit_button(f"Save {active_cat} Record", type="primary"):
         final_id = (
@@ -1343,7 +1409,10 @@ elif nav == "🥛 Animal Products & Performance":
       )
 
       c8, c9 = st.columns(2)
-      prod_date = c8.date_input("Date Recorded", value=date.today())
+      with c8:
+        prod_date = date_input_with_display(
+            "Date Recorded", f"dt_prod_{prod_animal_type}", date.today()
+        )
       prod_notes = c9.text_input(
           "Performance / Health Notes (optional)",
           placeholder="e.g., Strong yield / low output / needs checkup",
@@ -1611,7 +1680,9 @@ elif nav == "🌾 Feed, Mortality, Death & Days":
           placeholder="Or type exact group/animal...",
           default_blank=True,
       )
-      mort_date = st.date_input("Date of Mortality", value=date.today())
+      mort_date = date_input_with_display(
+          "Date of Mortality", f"dt_mort_{a_type}", date.today()
+      )
 
       death_cnt = int(
           quantity_selector(
@@ -1629,12 +1700,20 @@ elif nav == "🌾 Feed, Mortality, Death & Days":
           placeholder="Or type exact animal/cause...",
           default_blank=True,
       )
-      death_date = st.date_input("Date of Death", value=date.today())
+      death_date = date_input_with_display(
+          "Date of Death", f"dt_death_{a_type}", date.today()
+      )
 
       st.markdown("---")
       c9, c10 = st.columns(2)
-      date_rec = c9.date_input("Date Recorded / Brought", value=date.today())
-      date_fin = c10.date_input("Date Finish (Expected)", value=date.today())
+      with c9:
+        date_rec = date_input_with_display(
+            "Date Recorded / Brought", f"dt_frec_{a_type}", date.today()
+        )
+      with c10:
+        date_fin = date_input_with_display(
+            "Date Finish (Expected)", f"dt_ffin_{a_type}", date.today()
+        )
 
       if st.form_submit_button(
           f"Save {a_type} Feed, Mortality & Death Record", type="primary"
@@ -1746,7 +1825,10 @@ elif nav == "🩺 Health & Medication":
       )
 
       c_v1, c_v2 = st.columns(2)
-      visit_dt = c_v1.date_input("Visit Date", value=date.today())
+      with c_v1:
+        visit_dt = date_input_with_display(
+            "Visit Date", f"dt_visit_{h_type}", date.today()
+        )
       vet_cost = c_v2.number_input(
           "Medication / Visit Cost (optional)", min_value=0.0, step=1.0
       )
@@ -1836,9 +1918,18 @@ elif nav == "📦 Inventory, Planning & Sales/P&L":
       )
 
       c7, c8, c9 = st.columns(3)
-      rec_date = c7.date_input("Transaction Date", value=date.today())
-      plan_buy = c8.date_input("Planning to Buy Time", value=date.today())
-      plan_sell = c9.date_input("Planning to Sell Time", value=date.today())
+      with c7:
+        rec_date = date_input_with_display(
+            "Transaction Date", f"dt_irec_{a_type}", date.today()
+        )
+      with c8:
+        plan_buy = date_input_with_display(
+            "Planning to Buy Time", f"dt_ibuy_{a_type}", date.today()
+        )
+      with c9:
+        plan_sell = date_input_with_display(
+            "Planning to Sell Time", f"dt_isell_{a_type}", date.today()
+        )
 
       if st.form_submit_button(f"Save {a_type} {rec_type} Entry", type="primary"):
         total_val = float(qty) * float(unit_price)
@@ -1966,7 +2057,7 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
         amt = quantity_selector(
             "Amount", "w_act_amt", default_preset=10, min_val=0.0, step=5.0
         )
-        act_date = st.date_input("Date", value=date.today())
+        act_date = date_input_with_display("Date", "dt_wact", date.today())
         notes = st.text_input("Notes / Remarks (optional)").strip()
 
         if st.form_submit_button("Apply Worker Action", type="primary"):
@@ -2052,7 +2143,9 @@ elif nav == "🏦 Farm Loans Taken":
           min_val=0.0,
           step=50.0,
       )
-      taken_date = st.date_input("Date Taken", value=date.today())
+      taken_date = date_input_with_display(
+          "Date Taken", "dt_ltaken", date.today()
+      )
       l_notes = st.text_input("Purpose / Terms (optional)").strip()
       if st.form_submit_button("Record Farm Loan", type="primary"):
         final_lender = lender if lender else "General Lender"
