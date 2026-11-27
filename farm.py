@@ -273,349 +273,299 @@ def classify_age_gender(sex_val, age_stage_val=""):
 
 
 def inject_farm_theme(is_login_screen=False):
-  bg_overlay = (
-      "linear-gradient(rgba(10, 26, 15, 0.78), rgba(10, 26, 15, 0.84))"
-      if is_login_screen
-      else "linear-gradient(rgba(16, 42, 24, 0.72), rgba(12, 32, 18, 0.80))"
-  )
+  """
+  Apply a restrained, accessible D&P FARMS visual system.
+
+  The application logic and existing page structure are intentionally kept
+  unchanged; this function only controls presentation.
+  """
   st.markdown(
-      f"""
+      """
       <style>
-      /* Rich Deep Forest Farm Backdrop + Warm Cream & Emerald High-Contrast Surfaces */
-      .stApp {{
-          background-image: {bg_overlay}, url("{FARM_BG_URL}");
-          background-size: cover;
-          background-position: center;
-          background-attachment: fixed;
-          color: #f4f9f4 !important;
-      }}
-      .main .block-container {{
-          background: rgba(247, 250, 245, 0.96) !important;
-          border-radius: 16px !important;
-          padding: 1.5rem 2rem !important;
-          margin-top: 1rem !important;
-          margin-bottom: 2rem !important;
-          border: 2px solid #2e7d32 !important;
-          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28) !important;
-      }}
+      :root {
+          --dp-forest: #24543B;
+          --dp-forest-dark: #173D2B;
+          --dp-green: #397653;
+          --dp-sage: #E8F0E9;
+          --dp-cream: #F7F8F5;
+          --dp-surface: #FFFFFF;
+          --dp-text: #24332A;
+          --dp-muted: #647268;
+          --dp-border: #DCE4DD;
+          --dp-accent: #C58A3A;
+          --dp-danger: #A33B35;
+          --dp-shadow: 0 4px 16px rgba(24, 48, 33, 0.07);
+      }
 
-      /* Top Header Bar */
-      header[data-testid="stHeader"] {{
-          background: #102a18 !important;
-          border-bottom: 2px solid #43a047 !important;
-      }}
-      header[data-testid="stHeader"] button,
-      header[data-testid="stHeader"] svg {{
-          color: #ffffff !important;
-          fill: #ffffff !important;
-      }}
+      html, body, [class*="css"] {
+          font-family: Inter, "Segoe UI", Arial, sans-serif;
+      }
 
-      /* Main Area Text & All Widget Labels (including inside forms, columns, and selectboxes) */
-      .main h1, .main h2, .main h3, .main h4,
-      .main p, .main span, .main label, .main li,
-      div[data-testid="stWidgetLabel"],
-      div[data-testid="stWidgetLabel"] *,
-      div[data-testid="stMarkdownContainer"],
-      div[data-testid="stMarkdownContainer"] p,
-      div[data-testid="stMarkdownContainer"] span,
-      div[data-testid="stMarkdownContainer"] li,
-      div[data-testid="stCaptionContainer"],
-      div[data-testid="stCaptionContainer"] p,
-      div[data-testid="stHeadingWithActionElements"],
-      div[data-testid="stHeadingWithActionElements"] * {{
-          color: #112416 !important;
-          -webkit-text-fill-color: #112416 !important;
-          opacity: 1 !important;
-          visibility: visible !important;
-      }}
+      .stApp {
+          background: #F2F5F1;
+          color: var(--dp-text);
+      }
 
-      /* KPI Metric Cards — Crisp Sage-White Card with Rich Forest Border */
-      div[data-testid="stMetric"] {{
-          background: #e8f3ea !important;
-          border: 2px solid #1b5e20 !important;
-          border-radius: 12px !important;
-          padding: 0.75rem 0.85rem !important;
-          box-shadow: 0 4px 12px rgba(10, 28, 15, 0.14) !important;
-      }}
-      div[data-testid="stMetric"] *,
-      div[data-testid="stMetricLabel"] *,
-      div[data-testid="stMetricValue"] * {{
-          color: #0e2213 !important;
-          -webkit-text-fill-color: #0e2213 !important;
-          font-weight: 800 !important;
-          opacity: 1 !important;
-          visibility: visible !important;
-      }}
+      [data-testid="stAppViewContainer"] {
+          background: #F2F5F1;
+      }
 
-      /* Gallery Animal Count Badges — Soft Mint-Cream Card with Crisp Dark Text */
-      .dp-count-badge {{
-          background: #e3f1e6 !important;
-          color: #0e2213 !important;
-          border: 2px solid #2e7d32 !important;
-          border-radius: 10px !important;
-          padding: 0.55rem 0.7rem !important;
-          margin: 0.45rem 0 0.6rem 0 !important;
-          font-size: 0.9rem !important;
-          line-height: 1.5 !important;
-          box-shadow: 0 3px 8px rgba(10, 28, 15, 0.12) !important;
-          opacity: 1 !important;
-          visibility: visible !important;
-      }}
-      .dp-count-badge, .dp-count-badge * {{
-          color: #0e2213 !important;
-          -webkit-text-fill-color: #0e2213 !important;
-          opacity: 1 !important;
-          visibility: visible !important;
-      }}
-      .dp-count-badge strong {{
-          color: #14532d !important;
-          -webkit-text-fill-color: #14532d !important;
-          font-weight: 800 !important;
-      }}
+      .main .block-container {
+          max-width: 1500px;
+          padding: 2rem 2.2rem 3rem;
+      }
 
-      /* Uniform Animal Images */
-      .uniform-animal-card img {{
+      header[data-testid="stHeader"] {
+          background: rgba(247, 248, 245, 0.94);
+          border-bottom: 1px solid var(--dp-border);
+      }
+
+      h1, h2, h3, h4 {
+          color: var(--dp-forest-dark) !important;
+          letter-spacing: -0.025em;
+          font-weight: 700 !important;
+      }
+
+      h1 { font-size: 2rem !important; }
+      h2 { font-size: 1.55rem !important; }
+      h3 { font-size: 1.2rem !important; }
+
+      p, li, label, [data-testid="stMarkdownContainer"] {
+          color: var(--dp-text);
+      }
+
+      [data-testid="stCaptionContainer"] {
+          color: var(--dp-muted);
+      }
+
+      [data-testid="stMetric"] {
+          background: var(--dp-surface);
+          border: 1px solid var(--dp-border);
+          border-top: 3px solid var(--dp-green);
+          border-radius: 12px;
+          padding: 1rem 1.1rem;
+          box-shadow: var(--dp-shadow);
+      }
+
+      [data-testid="stMetricLabel"] {
+          color: var(--dp-muted) !important;
+          font-weight: 600;
+      }
+
+      [data-testid="stMetricValue"] {
+          color: var(--dp-forest-dark) !important;
+          font-weight: 750;
+      }
+
+      [data-testid="stForm"], [data-testid="stExpander"] {
+          background: var(--dp-surface);
+          border: 1px solid var(--dp-border);
+          border-radius: 12px;
+          box-shadow: var(--dp-shadow);
+      }
+
+      [data-testid="stForm"] {
+          padding: 1rem 1.1rem;
+      }
+
+      input, textarea, [data-baseweb="select"] > div {
+          background: #FFFFFF !important;
+          color: var(--dp-text) !important;
+          border-color: #C9D6CC !important;
+          border-radius: 8px !important;
+      }
+
+      input:focus, textarea:focus {
+          border-color: var(--dp-green) !important;
+          box-shadow: 0 0 0 1px var(--dp-green) !important;
+      }
+
+      [data-testid="stWidgetLabel"] label {
+          color: var(--dp-text) !important;
+          font-weight: 600 !important;
+      }
+
+      .stButton > button, .stFormSubmitButton > button,
+      .stDownloadButton > button {
+          border-radius: 8px;
+          min-height: 2.55rem;
+          font-weight: 650;
+          transition: all 120ms ease-in-out;
+      }
+
+      .stButton > button[kind="primary"],
+      .stFormSubmitButton > button[kind="primary"] {
+          background: var(--dp-forest);
+          color: #FFFFFF !important;
+          border: 1px solid var(--dp-forest);
+      }
+
+      .stButton > button[kind="primary"]:hover,
+      .stFormSubmitButton > button[kind="primary"]:hover {
+          background: var(--dp-forest-dark);
+          border-color: var(--dp-forest-dark);
+          color: #FFFFFF !important;
+      }
+
+      .stButton > button[kind="secondary"],
+      .stDownloadButton > button {
+          background: #FFFFFF;
+          color: var(--dp-forest-dark) !important;
+          border: 1px solid #BFCFC2;
+      }
+
+      .stButton > button[kind="secondary"]:hover,
+      .stDownloadButton > button:hover {
+          background: var(--dp-sage);
+          border-color: var(--dp-green);
+          color: var(--dp-forest-dark) !important;
+      }
+
+      [data-baseweb="tab-list"] {
+          gap: 0.35rem;
+          background: #E9EFEA;
+          border: 1px solid var(--dp-border);
+          border-radius: 10px;
+          padding: 0.35rem;
+      }
+
+      [data-baseweb="tab"] {
+          color: var(--dp-muted) !important;
+          font-weight: 600;
+          border-radius: 7px;
+      }
+
+      [aria-selected="true"][data-baseweb="tab"] {
+          background: #FFFFFF;
+          color: var(--dp-forest-dark) !important;
+      }
+
+      [data-testid="stDataFrame"], [data-testid="stTable"] {
+          border: 1px solid var(--dp-border);
+          border-radius: 10px;
+          overflow: hidden;
+      }
+
+      .dp-count-badge {
+          background: var(--dp-sage);
+          color: var(--dp-forest-dark);
+          border: 1px solid #C9D9CC;
+          border-radius: 9px;
+          padding: 0.65rem 0.8rem;
+          margin: 0.45rem 0 0.65rem;
+          font-size: 0.9rem;
+          line-height: 1.5;
+      }
+
+      .dp-count-badge strong {
+          color: var(--dp-forest);
+          font-weight: 750;
+      }
+
+      .uniform-animal-card img {
           width: 100% !important;
-          height: 210px !important;
+          height: 205px !important;
           object-fit: cover !important;
           border-radius: 10px !important;
-          border: 2px solid #2e7d32 !important;
-      }}
-      .uniform-hero-img img {{
+          border: 1px solid var(--dp-border) !important;
+      }
+
+      .uniform-hero-img img {
           width: 100% !important;
           height: 260px !important;
           object-fit: cover !important;
           border-radius: 12px !important;
-          border: 2px solid #1b5e20 !important;
-      }}
+          border: 1px solid var(--dp-border) !important;
+      }
 
-      /* Top Banner Card — Deep Forest Green Card with Crisp Ivory/White Text */
-      .dp-login-banner {{
-          background: linear-gradient(135deg, #13381e 0%, #1d522c 100%) !important;
-          border-left: 8px solid #86efac !important;
-          border: 2px solid #2e7d32 !important;
-          padding: 1.35rem 1.75rem !important;
-          border-radius: 14px !important;
-          box-shadow: 0 8px 22px rgba(10, 28, 15, 0.22) !important;
-          margin-bottom: 1.2rem !important;
-      }}
-      .dp-login-banner h1 {{
-          color: #ffffff !important;
-          -webkit-text-fill-color: #ffffff !important;
-          margin: 0 0 0.3rem 0 !important;
-          font-size: 2.05rem !important;
-          font-weight: 800 !important;
-      }}
-      .dp-login-banner p, .dp-login-banner strong {{
-          color: #e8f5e9 !important;
-          -webkit-text-fill-color: #e8f5e9 !important;
-          margin: 0 !important;
-          font-size: 1rem !important;
-      }}
+      .dp-login-banner {
+          background: linear-gradient(120deg, #173D2B 0%, #2D6547 100%);
+          border-left: 5px solid #D6A45C;
+          padding: 1.6rem 1.8rem;
+          border-radius: 14px;
+          box-shadow: var(--dp-shadow);
+          margin-bottom: 1.35rem;
+      }
 
-      /* Forms & All Input Controls */
-      div[data-testid="stForm"] {{
-          background: #f1f7f2 !important;
-          padding: 1.4rem 1.6rem !important;
-          border-radius: 14px !important;
-          border: 2px solid #2e7d32 !important;
-          box-shadow: 0 6px 20px rgba(10, 28, 15, 0.12) !important;
-      }}
-      div[data-testid="stForm"] label,
-      div[data-testid="stForm"] div[data-testid="stWidgetLabel"],
-      div[data-testid="stForm"] div[data-testid="stWidgetLabel"] * {{
-          color: #0e2213 !important;
-          -webkit-text-fill-color: #0e2213 !important;
-          font-weight: 700 !important;
-          opacity: 1 !important;
-          visibility: visible !important;
-      }}
-      .stTextInput input, .stNumberInput input, .stTextArea textarea,
-      div[data-baseweb="input"] input, div[data-baseweb="textarea"] textarea {{
-          background-color: #ffffff !important;
-          color: #0e2213 !important;
-          -webkit-text-fill-color: #0e2213 !important;
-          border: 1.5px solid #2e7d32 !important;
-          border-radius: 8px !important;
-          font-weight: 600 !important;
-          opacity: 1 !important;
-      }}
-      div[data-baseweb="select"] > div {{
-          background-color: #ffffff !important;
-          color: #0e2213 !important;
-          -webkit-text-fill-color: #0e2213 !important;
-          border: 1.5px solid #2e7d32 !important;
-          border-radius: 8px !important;
-          font-weight: 600 !important;
-          opacity: 1 !important;
-      }}
-      div[data-baseweb="select"] span, div[data-baseweb="select"] svg {{
-          color: #0e2213 !important;
-          -webkit-text-fill-color: #0e2213 !important;
-          fill: #1b5e20 !important;
-      }}
+      .dp-login-banner h1 {
+          color: #FFFFFF !important;
+          margin: 0 0 0.45rem;
+          font-size: 1.9rem !important;
+          font-weight: 750 !important;
+      }
 
-      /* Date Input Box & Calendar Button */
-      div[data-testid="stDateInput"] > div,
-      div[data-testid="stDateInput"] div[data-baseweb="input"],
-      div[data-testid="stDateInput"] div[data-baseweb="base-input"] {{
-          background-color: #ffffff !important;
-          background: #ffffff !important;
-          color: #0e2213 !important;
-          border: 2px solid #1b5e20 !important;
-          border-radius: 8px !important;
-      }}
-      div[data-testid="stDateInput"] input {{
-          background-color: #ffffff !important;
-          color: #0e2213 !important;
-          -webkit-text-fill-color: #0e2213 !important;
-          opacity: 1 !important;
-          font-weight: 700 !important;
-      }}
-      div[data-testid="stDateInput"] input::placeholder {{
-          color: #2e7d32 !important;
-          -webkit-text-fill-color: #2e7d32 !important;
-          opacity: 1 !important;
-      }}
-      div[data-testid="stDateInput"] button {{
-          background-color: #1b5e20 !important;
-          color: #ffffff !important;
-          border-radius: 6px !important;
-          margin: 3px !important;
-          padding: 0 8px !important;
-          opacity: 1 !important;
-          visibility: visible !important;
-      }}
-      div[data-testid="stDateInput"] button svg,
-      div[data-testid="stDateInput"] svg {{
-          color: #ffffff !important;
-          fill: #ffffff !important;
-          opacity: 1 !important;
-          visibility: visible !important;
-      }}
-      div[data-baseweb="calendar"],
-      div[data-baseweb="popover"] > div {{
-          background-color: #ffffff !important;
-          color: #0e2213 !important;
-          border: 2px solid #1b5e20 !important;
-      }}
-      div[data-baseweb="calendar"] *,
-      div[data-baseweb="popover"] * {{
-          color: #0e2213 !important;
-          -webkit-text-fill-color: #0e2213 !important;
-      }}
+      .dp-login-banner p, .dp-login-banner strong {
+          color: #EDF4EE !important;
+          margin: 0;
+          font-size: 0.98rem;
+      }
 
-      /* Primary & Secondary Action Buttons — Rich Forest Green & Crisp White Text */
-      .stButton > button[kind="primary"],
-      .stFormSubmitButton > button[kind="primary"] {{
-          background: linear-gradient(135deg, #14532d 0%, #1e6b38 100%) !important;
-          color: #ffffff !important;
-          -webkit-text-fill-color: #ffffff !important;
-          border: 1.5px solid #0e3b1f !important;
-          border-radius: 8px !important;
-          font-weight: 700 !important;
-      }}
-      .stButton > button[kind="primary"] *,
-      .stFormSubmitButton > button[kind="primary"] * {{
-          color: #ffffff !important;
-          -webkit-text-fill-color: #ffffff !important;
-      }}
-      .stButton > button[kind="secondary"],
-      .stFormSubmitButton > button[kind="secondary"],
-      .stDownloadButton > button {{
-          background-color: #dff0e3 !important;
-          color: #114223 !important;
-          -webkit-text-fill-color: #114223 !important;
-          border: 1.5px solid #1e6b38 !important;
-          border-radius: 8px !important;
-          font-weight: 700 !important;
-      }}
-      .stButton > button[kind="secondary"] *,
-      .stDownloadButton > button * {{
-          color: #114223 !important;
-          -webkit-text-fill-color: #114223 !important;
-      }}
+      section[data-testid="stSidebar"] {
+          background: #173D2B;
+          border-right: 1px solid #315C43;
+          min-width: 265px;
+      }
 
-      /* Tabs */
-      div[data-baseweb="tab-list"] {{
-          background: #dff0e3 !important;
-          padding: 0.4rem 0.6rem !important;
-          border-radius: 10px !important;
-          border: 1.5px solid #2e7d32 !important;
-          gap: 0.5rem !important;
-      }}
-      div[data-baseweb="tab-list"] button,
-      div[data-baseweb="tab-list"] button * {{
-          color: #0e2213 !important;
-          -webkit-text-fill-color: #0e2213 !important;
-          font-weight: 700 !important;
-      }}
+      section[data-testid="stSidebar"] > div {
+          background: transparent;
+      }
 
-      /* Sidebar Navigation */
-      section[data-testid="stSidebar"] {{
-          background-image: linear-gradient(rgba(10, 28, 15, 0.86), rgba(8, 22, 12, 0.92)), url("{FARM_BG_URL}") !important;
-          background-size: cover !important;
-          background-position: center !important;
-          border-right: 3px solid #43a047 !important;
-          min-width: 285px !important;
-      }}
-      section[data-testid="stSidebar"] > div {{
-          background: transparent !important;
-      }}
       section[data-testid="stSidebar"] h1,
       section[data-testid="stSidebar"] h2,
       section[data-testid="stSidebar"] h3,
       section[data-testid="stSidebar"] p,
       section[data-testid="stSidebar"] span,
       section[data-testid="stSidebar"] label,
-      section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] * {{
-          color: #ffffff !important;
-          -webkit-text-fill-color: #ffffff !important;
-          opacity: 1 !important;
-          visibility: visible !important;
-      }}
-      section[data-testid="stSidebar"] [data-testid="stRadio"] label {{
-          background-color: #f4faf5 !important;
-          border: 2px solid #43a047 !important;
-          border-radius: 8px !important;
-          padding: 0.48rem 0.72rem !important;
-          margin-bottom: 0.38rem !important;
-          display: flex !important;
-          align-items: center !important;
-          width: 100% !important;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
-          opacity: 1 !important;
-          visibility: visible !important;
-      }}
-      section[data-testid="stSidebar"] [data-testid="stRadio"] label *,
+      section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] * {
+          color: #F4F7F3 !important;
+      }
+
+      section[data-testid="stSidebar"] [data-testid="stRadio"] label {
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.13);
+          border-radius: 8px;
+          padding: 0.48rem 0.65rem;
+          margin-bottom: 0.3rem;
+          width: 100%;
+      }
+
       section[data-testid="stSidebar"] [data-testid="stRadio"] label p,
-      section[data-testid="stSidebar"] [data-testid="stRadio"] label span {{
-          color: #0e2213 !important;
-          -webkit-text-fill-color: #0e2213 !important;
-          font-weight: 700 !important;
-          font-size: 0.92rem !important;
-          opacity: 1 !important;
-          visibility: visible !important;
-      }}
-      section[data-testid="stSidebar"] button {{
-          background-color: #1e6b38 !important;
-          color: #ffffff !important;
-          -webkit-text-fill-color: #ffffff !important;
-          border: 1.5px solid #86efac !important;
-          border-radius: 8px !important;
-          font-weight: 700 !important;
-          opacity: 1 !important;
-          visibility: visible !important;
-      }}
-      section[data-testid="stSidebar"] button * {{
-          color: #ffffff !important;
-          -webkit-text-fill-color: #ffffff !important;
-      }}
+      section[data-testid="stSidebar"] [data-testid="stRadio"] label span {
+          color: #F4F7F3 !important;
+          font-size: 0.91rem;
+          font-weight: 550;
+      }
+
+      section[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
+          background: #E8F0E9;
+          border-color: #D2E2D5;
+      }
+
+      section[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) p,
+      section[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) span {
+          color: #173D2B !important;
+          font-weight: 700;
+      }
+
+      section[data-testid="stSidebar"] button {
+          border-radius: 8px;
+      }
+
+      @media (max-width: 768px) {
+          .main .block-container {
+              padding: 1rem 0.8rem 2rem;
+          }
+          .dp-login-banner {
+              padding: 1.2rem;
+          }
+          .dp-login-banner h1 {
+              font-size: 1.45rem !important;
+          }
+      }
       </style>
       """,
       unsafe_allow_html=True,
   )
-
 
 def render_uniform_image(url, caption="", hero=False):
   css_cls = "uniform-hero-img" if hero else "uniform-animal-card"
@@ -1386,30 +1336,25 @@ if "selected_animal_type" not in st.session_state:
   st.session_state.selected_animal_type = ANIMAL_CATEGORIES[0]
 if "active_page" not in st.session_state:
   st.session_state.active_page = NAV_SECTIONS_BASE[0]
-if "pending_animal_type" in st.session_state and st.session_state.pending_animal_type:
-  st.session_state.selected_animal_type = st.session_state.pending_animal_type
-  st.session_state.live_animal_cat_selector = st.session_state.pending_animal_type
-  st.session_state.pending_animal_type = None
-
 if "pending_page_jump" in st.session_state and st.session_state.pending_page_jump:
   st.session_state.active_page = st.session_state.pending_page_jump
+  st.session_state.dp_sidebar_page_radio = st.session_state.pending_page_jump
   st.session_state.pending_page_jump = None
 
 
-def _apply_animal_registration_jump(animal_category):
-  st.session_state.pending_animal_type = animal_category
+def go_to_animal_registration(animal_category):
+  st.session_state.selected_animal_type = animal_category
+  st.session_state.live_animal_cat_selector = animal_category
   st.session_state.active_page = "🐾 Animals & Categories"
   st.session_state.dp_sidebar_page_radio = "🐾 Animals & Categories"
-
-
-def go_to_animal_registration(animal_category):
-  _apply_animal_registration_jump(animal_category)
+  st.session_state.pending_page_jump = "🐾 Animals & Categories"
   st.rerun()
 
 
 def request_navigation(target_page):
   st.session_state.active_page = target_page
   st.session_state.dp_sidebar_page_radio = target_page
+  st.session_state.pending_page_jump = target_page
   st.rerun()
 
 
@@ -1654,13 +1599,12 @@ if nav == "🏡 Farm Overview & Gallery":
   for idx, cat in enumerate(ANIMAL_CATEGORIES):
     with g_cols[idx % 4]:
       render_uniform_image(ANIMAL_IMAGES[cat], caption=cat, hero=False)
-      st.button(
+      if st.button(
           f"🖼️ Open {cat} Registration",
           key=f"overview_img_jump_{idx}",
           use_container_width=True,
-          on_click=_apply_animal_registration_jump,
-          args=(cat,),
-      )
+      ):
+        go_to_animal_registration(cat)
       if not df_animals.empty and "animal_type" in df_animals.columns:
         sub_c = df_animals[df_animals["animal_type"] == cat]
         count_in_cat = len(sub_c)
@@ -1690,14 +1634,13 @@ if nav == "🏡 Farm Overview & Gallery":
           """,
           unsafe_allow_html=True,
       )
-      st.button(
+      if st.button(
           f"➕ Register {cat}",
           key=f"overview_jump_{idx}",
           use_container_width=True,
           type="primary",
-          on_click=_apply_animal_registration_jump,
-          args=(cat,),
-      )
+      ):
+        go_to_animal_registration(cat)
 
   st.markdown("---")
   st.subheader("📊 Individual Animals Summary: Adult & Young Females and Males")
@@ -1770,22 +1713,18 @@ elif nav == "🐾 Animals & Categories":
           if st.session_state.selected_animal_type == cat
           else f"Select {cat}"
       )
-      st.button(
-          btn_label,
-          key=f"img_jump_{idx}",
-          use_container_width=True,
-          on_click=_apply_animal_registration_jump,
-          args=(cat,),
-      )
+      if st.button(btn_label, key=f"img_jump_{idx}", use_container_width=True):
+        go_to_animal_registration(cat)
 
   st.markdown("---")
   sel_col1, sel_col2 = st.columns([1, 2])
   with sel_col1:
-    if st.session_state.get("live_animal_cat_selector") != st.session_state.selected_animal_type:
-      st.session_state.live_animal_cat_selector = st.session_state.selected_animal_type
     chosen_cat = st.selectbox(
         "Active Animal Category",
         ANIMAL_CATEGORIES,
+        index=ANIMAL_CATEGORIES.index(st.session_state.selected_animal_type)
+        if st.session_state.selected_animal_type in ANIMAL_CATEGORIES
+        else 0,
         key="live_animal_cat_selector",
     )
     if chosen_cat != st.session_state.selected_animal_type:
