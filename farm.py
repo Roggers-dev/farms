@@ -740,6 +740,107 @@ def use_postgres(engine):
   return engine is not None and SQLALCHEMY_AVAILABLE
 
 
+def _migrate_animals_composite_pk(engine):
+  if use_postgres(engine):
+    with engine.begin() as conn:
+      # Check if animals table exists and whether (animal_type, id_number) is already PK
+      pk_cols = conn.execute(
+          sqlalchemy.text("""
+              SELECT a.attname
+              FROM pg_index i
+              JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+              WHERE i.indrelid = 'animals'::regclass AND i.indisprimary
+          """)
+      ).fetchall()
+      pk_names = [r[0] for r in pk_cols]
+      if pk_names and set(pk_names) != {"animal_type", "id_number"}:
+        conn.execute(
+            sqlalchemy.text("""
+                CREATE TABLE IF NOT EXISTS animals_v2 (
+                    id_number TEXT NOT NULL,
+                    animal_type TEXT NOT NULL,
+                    room_number TEXT NOT NULL,
+                    date_brought TEXT,
+                    sex TEXT NOT NULL,
+                    age_stage TEXT DEFAULT 'Adult',
+                    cost DOUBLE PRECISION DEFAULT 0.0,
+                    date_of_birth TEXT,
+                    crossing_date TEXT,
+                    farrow_date TEXT,
+                    status TEXT DEFAULT 'Active',
+                    plan_buy_date TEXT,
+                    plan_sell_date TEXT,
+                    PRIMARY KEY (animal_type, id_number)
+                )
+            """)
+        )
+        conn.execute(
+            sqlalchemy.text("""
+                INSERT INTO animals_v2 (
+                    id_number, animal_type, room_number, date_brought,
+                    sex, age_stage, cost, date_of_birth, crossing_date,
+                    farrow_date, status, plan_buy_date, plan_sell_date
+                )
+                SELECT
+                    TRIM(id_number), TRIM(animal_type), room_number, date_brought,
+                    sex, COALESCE(age_stage, 'Adult'), COALESCE(cost, 0.0),
+                    date_of_birth, crossing_date, farrow_date,
+                    COALESCE(status, 'Active'), plan_buy_date, plan_sell_date
+                FROM animals
+                WHERE TRIM(COALESCE(id_number, '')) <> '' AND TRIM(COALESCE(animal_type, '')) <> ''
+                ON CONFLICT (animal_type, id_number) DO NOTHING
+            """)
+        )
+        conn.execute(sqlalchemy.text("DROP TABLE animals"))
+        conn.execute(sqlalchemy.text("ALTER TABLE animals_v2 RENAME TO animals"))
+  else:
+    with sqlite3.connect(SQLITE_PATH) as conn:
+      tbl_exists = conn.execute(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='animals'"
+      ).fetchone()
+      if tbl_exists:
+        info = conn.execute("PRAGMA table_info(animals)").fetchall()
+        pk_cols = [r[1] for r in info if r[5] > 0]
+        if pk_cols and set(pk_cols) != {"animal_type", "id_number"}:
+          conn.execute("""
+              CREATE TABLE IF NOT EXISTS animals_v2 (
+                  id_number TEXT NOT NULL,
+                  animal_type TEXT NOT NULL,
+                  room_number TEXT NOT NULL,
+                  date_brought TEXT,
+                  sex TEXT NOT NULL,
+                  age_stage TEXT DEFAULT 'Adult',
+                  cost REAL DEFAULT 0.0,
+                  date_of_birth TEXT,
+                  crossing_date TEXT,
+                  farrow_date TEXT,
+                  status TEXT DEFAULT 'Active',
+                  plan_buy_date TEXT,
+                  plan_sell_date TEXT,
+                  PRIMARY KEY (animal_type, id_number)
+              )
+          """)
+          cols_present = {r[1] for r in info}
+          age_expr = "COALESCE(age_stage, 'Adult')" if "age_stage" in cols_present else "'Adult'"
+          conn.execute(f"""
+              INSERT OR IGNORE INTO animals_v2 (
+                  id_number, animal_type, room_number, date_brought,
+                  sex, age_stage, cost, date_of_birth, crossing_date,
+                  farrow_date, status, plan_buy_date, plan_sell_date
+              )
+              SELECT
+                  TRIM(id_number), TRIM(animal_type), room_number, date_brought,
+                  sex, {age_expr}, COALESCE(cost, 0.0),
+                  date_of_birth, crossing_date, farrow_date,
+                  COALESCE(status, 'Active'), plan_buy_date, plan_sell_date
+              FROM animals
+              WHERE TRIM(COALESCE(id_number, '')) <> '' AND TRIM(COALESCE(animal_type, '')) <> ''
+          """)
+          conn.execute("DROP TABLE animals")
+          conn.execute("ALTER TABLE animals_v2 RENAME TO animals")
+          conn.commit()
+
+
 def init_db(engine):
   if use_postgres(engine):
     with engine.begin() as conn:
@@ -757,7 +858,7 @@ def init_db(engine):
       conn.execute(
           sqlalchemy.text("""
                 CREATE TABLE IF NOT EXISTS animals (
-                    id_number TEXT PRIMARY KEY,
+                    id_number TEXT NOT NULL,
                     animal_type TEXT NOT NULL,
                     room_number TEXT NOT NULL,
                     date_brought TEXT,
@@ -769,7 +870,8 @@ def init_db(engine):
                     farrow_date TEXT,
                     status TEXT DEFAULT 'Active',
                     plan_buy_date TEXT,
-                    plan_sell_date TEXT
+                    plan_sell_date TEXT,
+                    PRIMARY KEY (animal_type, id_number)
                 )
             """)
       )
@@ -913,6 +1015,7 @@ def init_db(engine):
                 ON CONFLICT (username) DO NOTHING
             """)
       )
+    _migrate_animals_composite_pk(engine)
   else:
     with sqlite3.connect(SQLITE_PATH) as conn:
       conn.execute("""
@@ -926,7 +1029,7 @@ def init_db(engine):
             """)
       conn.execute("""
                 CREATE TABLE IF NOT EXISTS animals (
-                    id_number TEXT PRIMARY KEY,
+                    id_number TEXT NOT NULL,
                     animal_type TEXT NOT NULL,
                     room_number TEXT NOT NULL,
                     date_brought TEXT,
@@ -938,7 +1041,8 @@ def init_db(engine):
                     farrow_date TEXT,
                     status TEXT DEFAULT 'Active',
                     plan_buy_date TEXT,
-                    plan_sell_date TEXT
+                    plan_sell_date TEXT,
+                    PRIMARY KEY (animal_type, id_number)
                 )
             """)
       conn.execute("""
@@ -1075,6 +1179,7 @@ def init_db(engine):
                 INSERT OR IGNORE INTO users (username, full_name, role, password)
                 VALUES ('staff', 'D&P FARMS Supervisor', 'staff', 'staff123')
             """)
+    _migrate_animals_composite_pk(engine)
 
 
 def _convert_sql_and_params(query, params, pg_mode):
@@ -1183,12 +1288,30 @@ def safe_int(val, default=0):
     return default
 
 
+def deduplicate_group_animals(df_animals):
+  """Ensures each animal is uniquely counted within its own animal_type group."""
+  if df_animals is None or df_animals.empty:
+    return pd.DataFrame()
+  out = df_animals.copy()
+  if "animal_type" in out.columns:
+    out["animal_type"] = out["animal_type"].astype(str).str.strip()
+  if "id_number" in out.columns:
+    out["id_number"] = out["id_number"].astype(str).str.strip()
+    out = out[out["id_number"] != ""]
+    if "animal_type" in out.columns:
+      out = out.drop_duplicates(subset=["animal_type", "id_number"], keep="last")
+    else:
+      out = out.drop_duplicates(subset=["id_number"], keep="last")
+  return out
+
+
 def build_category_gender_summary(df_animals):
-  """Returns Adult Female, Adult Male, Young Female, Young Male, Mixed/Other, and Total counts for every animal category."""
+  """Returns Adult Female, Adult Male, Young Female, Young Male, Mixed/Other, and Total counts uniquely per animal group."""
+  clean_animals = deduplicate_group_animals(df_animals)
   rows = []
   for cat in ANIMAL_CATEGORIES:
-    if not df_animals.empty and "animal_type" in df_animals.columns:
-      sub = df_animals[df_animals["animal_type"] == cat]
+    if not clean_animals.empty and "animal_type" in clean_animals.columns:
+      sub = clean_animals[clean_animals["animal_type"] == cat]
     else:
       sub = pd.DataFrame()
     total_cnt = len(sub)
@@ -1213,7 +1336,8 @@ def build_category_gender_summary(df_animals):
       other_cnt = 0
       cost_sum = 0.0
     rows.append({
-        "Animal Type": cat,
+        "Animal Group": cat,
+        "Unique IDs Counted": total_cnt,
         "Adult Females": adult_f,
         "Adult Males": adult_m,
         "Young Females": young_f,
@@ -1226,7 +1350,8 @@ def build_category_gender_summary(df_animals):
     })
   summary_df = pd.DataFrame(rows)
   totals_row = pd.DataFrame([{
-      "Animal Type": "ALL LIVESTOCK TOTAL",
+      "Animal Group": "ALL ANIMAL GROUPS TOTAL",
+      "Unique IDs Counted": int(summary_df["Unique IDs Counted"].sum()),
       "Adult Females": int(summary_df["Adult Females"].sum()),
       "Adult Males": int(summary_df["Adult Males"].sum()),
       "Young Females": int(summary_df["Young Females"].sum()),
@@ -1360,10 +1485,11 @@ df_workers = read_df(pg_engine, "SELECT * FROM workers")
 df_w_logs = read_df(pg_engine, "SELECT * FROM worker_finance_logs")
 df_farm_loans = read_df(pg_engine, "SELECT * FROM farm_loans")
 
-total_animals = len(df_animals)
-if not df_animals.empty:
-  _age_all = df_animals["age_stage"] if "age_stage" in df_animals.columns else pd.Series([""] * len(df_animals), index=df_animals.index)
-  _ag_all = pd.Series([classify_age_gender(sx, ag) for sx, ag in zip(df_animals["sex"], _age_all)])
+df_animals_unique = deduplicate_group_animals(df_animals)
+total_animals = len(df_animals_unique)
+if not df_animals_unique.empty:
+  _age_all = df_animals_unique["age_stage"] if "age_stage" in df_animals_unique.columns else pd.Series([""] * len(df_animals_unique), index=df_animals_unique.index)
+  _ag_all = pd.Series([classify_age_gender(sx, ag) for sx, ag in zip(df_animals_unique["sex"], _age_all)])
   total_adult_females = int((_ag_all == "Adult Female").sum())
   total_adult_males = int((_ag_all == "Adult Male").sum())
   total_young_females = int((_ag_all == "Young Female").sum())
@@ -1375,7 +1501,7 @@ else:
   total_young_males = 0
 
 total_animal_cost = (
-    float(df_animals["cost"].fillna(0).sum()) if not df_animals.empty else 0.0
+    float(df_animals_unique["cost"].fillna(0).sum()) if not df_animals_unique.empty else 0.0
 )
 total_feed_other_exp = (
     float(
@@ -1459,12 +1585,24 @@ nav = st.session_state.active_page
 
 
 def get_ids_for_animal_type(a_type):
-  if df_animals.empty or "id_number" not in df_animals.columns:
+  if (
+      df_animals.empty
+      or "id_number" not in df_animals.columns
+      or "animal_type" not in df_animals.columns
+  ):
     return []
-  sub = df_animals[df_animals["animal_type"] == a_type]
+  sub = df_animals[df_animals["animal_type"].astype(str).str.strip() == str(a_type).strip()]
   if sub.empty:
-    return df_animals["id_number"].dropna().astype(str).tolist()
-  return sub["id_number"].dropna().astype(str).tolist()
+    return []
+  return (
+      sub["id_number"]
+      .dropna()
+      .astype(str)
+      .str.strip()
+      .loc[lambda s: s != ""]
+      .unique()
+      .tolist()
+  )
 
 
 def get_rooms_for_animal_type(a_type):
@@ -1719,47 +1857,58 @@ elif nav == "🐾 Animals & Categories":
             "Planning to Sell Time (Optional)", f"dt_psell_{active_cat}", None
         )
       if st.form_submit_button(f"Save {active_cat} Record", type="primary"):
+        clean_aid = id_number.strip()
         final_id = (
-            id_number
-            if id_number
+            clean_aid
+            if clean_aid
             else f"{prof['id_prefix']}-{uuid.uuid4().hex[:5].upper()}"
         )
         final_room = room_number if room_number else prof["housing_presets"][0]
         final_sex = sex if sex else prof["sex_options"][0]
-        # Auto-sync age_stage if user picked a clearly young preset while age_stage was Adult
         auto_ag_label = classify_age_gender(final_sex, age_stage)
         final_age_stage = "Young" if auto_ag_label.startswith("Young") else age_stage
-        try:
-          exec_sql(
-              pg_engine,
-              """
-              INSERT INTO animals (
-                  id_number, animal_type, room_number, date_brought,
-                  sex, age_stage, cost, date_of_birth, crossing_date, farrow_date,
-                  plan_buy_date, plan_sell_date
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              """,
-              (
-                  final_id,
-                  active_cat,
-                  final_room,
-                  date_brought,
-                  final_sex,
-                  final_age_stage,
-                  float(cost),
-                  date_of_birth,
-                  crossing_date,
-                  farrow_date,
-                  plan_buy_date,
-                  plan_sell_date,
-              ),
+        existing_in_group = read_df(
+            pg_engine,
+            "SELECT id_number FROM animals WHERE animal_type = ? AND LOWER(TRIM(id_number)) = LOWER(?)",
+            (active_cat, final_id),
+        )
+        if not existing_in_group.empty:
+          st.error(
+              f"ID `{final_id}` is already registered in **{active_cat}**. "
+              f"Use a unique ID within {active_cat} (the same ID can still be used in other animal groups)."
           )
-          st.success(
-              f"Registered {active_cat} with ID `{final_id}` ({auto_ag_label} — {final_sex}) in `{final_room}`."
-          )
-          st.rerun()
-        except Exception as exc:
-          st.error(f"Could not save animal record: {exc}")
+        else:
+          try:
+            exec_sql(
+                pg_engine,
+                """
+                INSERT INTO animals (
+                    id_number, animal_type, room_number, date_brought,
+                    sex, age_stage, cost, date_of_birth, crossing_date, farrow_date,
+                    plan_buy_date, plan_sell_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    final_id,
+                    active_cat,
+                    final_room,
+                    date_brought,
+                    final_sex,
+                    final_age_stage,
+                    float(cost),
+                    date_of_birth,
+                    crossing_date,
+                    farrow_date,
+                    plan_buy_date,
+                    plan_sell_date,
+                ),
+            )
+            st.success(
+                f"Registered {active_cat} with unique group ID `{final_id}` ({auto_ag_label} — {final_sex}) in `{final_room}`."
+            )
+            st.rerun()
+          except Exception as exc:
+            st.error(f"Could not save animal record: {exc}")
 
   st.markdown("---")
   st.subheader("📊 Gender & Total Counts by Animal Category")
@@ -1807,116 +1956,10 @@ elif nav == "🐾 Animals & Categories":
     st.subheader("📋 All Registered Animals Directory (All Categories)")
     st.dataframe(df_animals_enriched, use_container_width=True, hide_index=True)
 
-    # EDITABLE ANIMAL ENTRIES
-    st.markdown("---")
-    st.subheader("✏️ Edit Any Registered Animal Record")
-    animal_ids_all = df_animals["id_number"].tolist()
-    edit_aid = st.selectbox(
-        "Select Animal ID to Edit",
-        animal_ids_all,
-        key="select_edit_animal_id",
+    st.info(
+        "🔒 Editing or deleting registered animal records by Animal ID is restricted to the "
+        "**Admin User & Password Control** page."
     )
-    row_to_edit = df_animals[df_animals["id_number"] == edit_aid].iloc[0]
-    with st.form("edit_animal_record_form"):
-      ec1, ec2, ec3, ec3b = st.columns(4)
-      new_atype = ec1.selectbox(
-          "Animal Category",
-          ANIMAL_CATEGORIES,
-          index=ANIMAL_CATEGORIES.index(row_to_edit["animal_type"])
-          if row_to_edit["animal_type"] in ANIMAL_CATEGORIES
-          else 0,
-      )
-      new_room = ec2.text_input(
-          "Housing / Pen / Room", value=clean_str_val(row_to_edit["room_number"])
-      ).strip()
-      cur_astage = clean_str_val(row_to_edit.get("age_stage", "Adult")) or "Adult"
-      age_opts = ["Adult", "Young"]
-      if cur_astage not in age_opts:
-        age_opts.append(cur_astage)
-      new_age_stage = ec3.selectbox(
-          "Age Group (Adult / Young)", age_opts, index=age_opts.index(cur_astage)
-      )
-      new_sex = ec3b.text_input(
-          "Sex / Gender (Male / Female / Class)", value=clean_str_val(row_to_edit["sex"])
-      ).strip()
-
-      ec4, ec5, ec6 = st.columns(3)
-      new_cost = ec4.number_input(
-          "Acquisition Cost",
-          min_value=0.0,
-          value=safe_float(row_to_edit["cost"], 0.0),
-          step=10.0,
-      )
-      status_opts = ["Active", "Sold", "Deceased", "Transferred", "Quarantine"]
-      cur_status = clean_str_val(row_to_edit.get("status", "Active")) or "Active"
-      if cur_status not in status_opts:
-        status_opts.append(cur_status)
-      new_status = ec5.selectbox(
-          "Status", status_opts, index=status_opts.index(cur_status)
-      )
-      new_dbrought = ec6.text_input(
-          "Date Brought (YYYY-MM-DD or empty)",
-          value=clean_str_val(row_to_edit["date_brought"]),
-      ).strip()
-
-      ec7, ec8, ec9, ec10, ec11 = st.columns(5)
-      new_dob = ec7.text_input(
-          "Date of Birth (YYYY-MM-DD or empty)",
-          value=clean_str_val(row_to_edit["date_of_birth"]),
-      ).strip()
-      new_cross = ec8.text_input(
-          "Crossing Date (YYYY-MM-DD or empty)",
-          value=clean_str_val(row_to_edit["crossing_date"]),
-      ).strip()
-      new_farrow = ec9.text_input(
-          "Birth/Farrow Date (YYYY-MM-DD or empty)",
-          value=clean_str_val(row_to_edit["farrow_date"]),
-      ).strip()
-      new_pbuy = ec10.text_input(
-          "Plan Buy Date (YYYY-MM-DD or empty)",
-          value=clean_str_val(row_to_edit["plan_buy_date"]),
-      ).strip()
-      new_psell = ec11.text_input(
-          "Plan Sell Date (YYYY-MM-DD or empty)",
-          value=clean_str_val(row_to_edit["plan_sell_date"]),
-      ).strip()
-
-      b_upd, b_del = st.columns(2)
-      save_edit_btn = b_upd.form_submit_button("💾 Update Animal Record", type="primary")
-      del_edit_btn = b_del.form_submit_button("🗑️ Delete This Animal Record")
-
-      if save_edit_btn:
-        exec_sql(
-            pg_engine,
-            """
-            UPDATE animals SET
-                animal_type = ?, room_number = ?, date_brought = ?, sex = ?,
-                age_stage = ?, cost = ?, date_of_birth = ?, crossing_date = ?, farrow_date = ?,
-                status = ?, plan_buy_date = ?, plan_sell_date = ?
-            WHERE id_number = ?
-            """,
-            (
-                new_atype,
-                new_room or "Unassigned",
-                new_dbrought,
-                new_sex or "Unspecified",
-                new_age_stage,
-                float(new_cost),
-                new_dob,
-                new_cross,
-                new_farrow,
-                new_status,
-                new_pbuy,
-                new_psell,
-                edit_aid,
-            ),
-        )
-        st.success(f"Updated record for Animal ID `{edit_aid}`.")
-        st.rerun()
-      if del_edit_btn:
-        exec_sql(pg_engine, "DELETE FROM animals WHERE id_number = ?", (edit_aid,))
-        st.warning(f"Deleted Animal ID `{edit_aid}`.")
-        st.rerun()
   else:
     st.info("No animals registered yet.")
 
@@ -3360,3 +3403,135 @@ elif nav == "🛡️ Admin User & Password Control":
           )
           st.success(f"Password updated for `{target_u}`.")
           st.rerun()
+
+  st.markdown("---")
+  st.subheader("✏️ Admin Only: Edit or Delete Animal Record by Animal Group & Animal ID")
+  st.caption(
+      "Animal IDs are isolated per animal group. Select the Animal Group first, "
+      "then select the Animal ID within that group to edit or delete its record."
+  )
+  df_adm_animals = read_df(pg_engine, "SELECT * FROM animals ORDER BY animal_type, id_number")
+  if not df_adm_animals.empty:
+    adm_grp_choice = st.selectbox(
+        "1. Select Animal Group",
+        ANIMAL_CATEGORIES,
+        key="admin_edit_animal_group_sel",
+    )
+    sub_adm_grp = df_adm_animals[df_adm_animals["animal_type"] == adm_grp_choice]
+    grp_id_list = sub_adm_grp["id_number"].dropna().astype(str).tolist()
+    if grp_id_list:
+      edit_aid_adm = st.selectbox(
+          f"2. Select {adm_grp_choice} Animal ID to Edit",
+          grp_id_list,
+          key="admin_edit_animal_id_sel",
+      )
+      row_adm_edit = sub_adm_grp[sub_adm_grp["id_number"].astype(str) == str(edit_aid_adm)].iloc[0]
+      with st.form("admin_edit_animal_record_form"):
+        ec1, ec2, ec3, ec3b = st.columns(4)
+        new_atype = ec1.selectbox(
+            "Animal Group",
+            ANIMAL_CATEGORIES,
+            index=ANIMAL_CATEGORIES.index(row_adm_edit["animal_type"])
+            if row_adm_edit["animal_type"] in ANIMAL_CATEGORIES
+            else 0,
+        )
+        new_room = ec2.text_input(
+            "Housing / Pen / Room", value=clean_str_val(row_adm_edit["room_number"])
+        ).strip()
+        cur_astage = clean_str_val(row_adm_edit.get("age_stage", "Adult")) or "Adult"
+        age_opts = ["Adult", "Young"]
+        if cur_astage not in age_opts:
+          age_opts.append(cur_astage)
+        new_age_stage = ec3.selectbox(
+            "Age Group (Adult / Young)", age_opts, index=age_opts.index(cur_astage)
+        )
+        new_sex = ec3b.text_input(
+            "Sex / Gender (Male / Female / Class)", value=clean_str_val(row_adm_edit["sex"])
+        ).strip()
+
+        ec4, ec5, ec6 = st.columns(3)
+        new_cost = ec4.number_input(
+            "Acquisition Cost",
+            min_value=0.0,
+            value=safe_float(row_adm_edit["cost"], 0.0),
+            step=10.0,
+        )
+        status_opts = ["Active", "Sold", "Deceased", "Transferred", "Quarantine"]
+        cur_status = clean_str_val(row_adm_edit.get("status", "Active")) or "Active"
+        if cur_status not in status_opts:
+          status_opts.append(cur_status)
+        new_status = ec5.selectbox(
+            "Status", status_opts, index=status_opts.index(cur_status)
+        )
+        new_dbrought = ec6.text_input(
+            "Date Brought (YYYY-MM-DD or empty)",
+            value=clean_str_val(row_adm_edit["date_brought"]),
+        ).strip()
+
+        ec7, ec8, ec9, ec10, ec11 = st.columns(5)
+        new_dob = ec7.text_input(
+            "Date of Birth (YYYY-MM-DD or empty)",
+            value=clean_str_val(row_adm_edit["date_of_birth"]),
+        ).strip()
+        new_cross = ec8.text_input(
+            "Crossing Date (YYYY-MM-DD or empty)",
+            value=clean_str_val(row_adm_edit["crossing_date"]),
+        ).strip()
+        new_farrow = ec9.text_input(
+            "Birth/Farrow Date (YYYY-MM-DD or empty)",
+            value=clean_str_val(row_adm_edit["farrow_date"]),
+        ).strip()
+        new_pbuy = ec10.text_input(
+            "Plan Buy Date (YYYY-MM-DD or empty)",
+            value=clean_str_val(row_adm_edit["plan_buy_date"]),
+        ).strip()
+        new_psell = ec11.text_input(
+            "Plan Sell Date (YYYY-MM-DD or empty)",
+            value=clean_str_val(row_adm_edit["plan_sell_date"]),
+        ).strip()
+
+        b_upd, b_del = st.columns(2)
+        save_edit_btn = b_upd.form_submit_button("💾 Update Animal Record", type="primary")
+        del_edit_btn = b_del.form_submit_button("🗑️ Delete This Animal Record")
+
+        if save_edit_btn:
+          exec_sql(
+              pg_engine,
+              """
+              UPDATE animals SET
+                  animal_type = ?, room_number = ?, date_brought = ?, sex = ?,
+                  age_stage = ?, cost = ?, date_of_birth = ?, crossing_date = ?, farrow_date = ?,
+                  status = ?, plan_buy_date = ?, plan_sell_date = ?
+              WHERE animal_type = ? AND id_number = ?
+              """,
+              (
+                  new_atype,
+                  new_room or "Unassigned",
+                  new_dbrought,
+                  new_sex or "Unspecified",
+                  new_age_stage,
+                  float(new_cost),
+                  new_dob,
+                  new_cross,
+                  new_farrow,
+                  new_status,
+                  new_pbuy,
+                  new_psell,
+                  adm_grp_choice,
+                  str(edit_aid_adm),
+              ),
+          )
+          st.success(f"Updated record for {adm_grp_choice} — Animal ID `{edit_aid_adm}`.")
+          st.rerun()
+        if del_edit_btn:
+          exec_sql(
+              pg_engine,
+              "DELETE FROM animals WHERE animal_type = ? AND id_number = ?",
+              (adm_grp_choice, str(edit_aid_adm)),
+          )
+          st.warning(f"Deleted {adm_grp_choice} — Animal ID `{edit_aid_adm}`.")
+          st.rerun()
+    else:
+      st.info(f"No animals registered under {adm_grp_choice} yet.")
+  else:
+    st.info("No animals registered in the system yet.")
