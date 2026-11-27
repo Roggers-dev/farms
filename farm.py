@@ -49,7 +49,7 @@ ANIMAL_IMAGES = {
         "https://images.unsplash.com/photo-1585110396000-c9ffd4e4b308?auto=format&fit=crop&w=800&h=520&q=80"
     ),
     "Other Livestock": (
-        "https://images.unsplash.com/photo-1500595046711-ee27150ad24e?auto=format&fit=crop&w=800&h=520&q=80"
+        "https://www.lavalleedestortues.fr/wa_images/leptitranch%20%283%29.jpg?v=1imrqmf"
     ),
 }
 
@@ -200,6 +200,7 @@ ANIMAL_PROFILES = {
         "inv_items": ["Grower Rabbits", "Breeding Does", "Rabbit Urine (Litres)", "Rabbit Pellets"],
     },
     "Other Livestock": {
+        "species_options": ["Donkey", "Horse", "Camel", "Water Buffalo", "Duck", "Turkey", "Guinea Fowl", "Goose", "Quail", "Pigeon", "Ostrich", "Peacock", "Deer", "Grasscutter", "Fish", "Bee Colony", "Other (specify)"],
         "housing_label": "Enclosure / Pond / Pen",
         "housing_presets": ["Enclosure-01", "Pen-A", "Pond-01", "House-01"],
         "id_prefix": "ANM",
@@ -270,6 +271,59 @@ def classify_age_gender(sex_val, age_stage_val=""):
   if gender == "Male":
     return "Young Male" if is_young else "Adult Male"
   return "Mixed / Other"
+
+
+def calculate_animal_age(date_of_birth):
+  """Return a readable age from an ISO date; unknown dates remain unclassified."""
+  if not date_of_birth:
+    return "Not recorded"
+  try:
+    born = datetime.strptime(str(date_of_birth)[:10], "%Y-%m-%d").date()
+    today = date.today()
+    if born > today:
+      return "Invalid future birth date"
+    months = (today.year - born.year) * 12 + today.month - born.month
+    if today.day < born.day:
+      months -= 1
+    years, rem_months = divmod(max(months, 0), 12)
+    if years:
+      return f"{years} yr {rem_months} mo" if rem_months else f"{years} yr"
+    return f"{rem_months} months" if rem_months else "Under 1 month"
+  except (TypeError, ValueError):
+    return "Not recorded"
+
+
+def ensure_animal_detail_columns(engine):
+  """Add detailed individual-animal fields without changing or dropping existing data."""
+  columns = {
+      "animal_name": "TEXT",
+      "species_detail": "TEXT",
+      "breed": "TEXT",
+      "gender": "TEXT",
+      "coat_colour": "TEXT",
+      "identifying_marks": "TEXT",
+      "identification_method": "TEXT",
+      "source_of_animal": "TEXT",
+      "dam_id": "TEXT",
+      "sire_id": "TEXT",
+      "birth_weight_kg": "DOUBLE PRECISION DEFAULT 0",
+      "current_weight_kg": "DOUBLE PRECISION DEFAULT 0",
+      "weight_recorded_on": "TEXT",
+      "reproductive_status": "TEXT",
+      "animal_notes": "TEXT",
+  }
+  if use_postgres(engine):
+    with engine.begin() as conn:
+      for name, dtype in columns.items():
+        conn.execute(sqlalchemy.text(f"ALTER TABLE animals ADD COLUMN IF NOT EXISTS {name} {dtype}"))
+  else:
+    with sqlite3.connect(SQLITE_PATH) as conn:
+      existing = {row[1] for row in conn.execute("PRAGMA table_info(animals)").fetchall()}
+      for name, dtype in columns.items():
+        if name not in existing:
+          sqlite_type = dtype.replace("DOUBLE PRECISION", "REAL")
+          conn.execute(f"ALTER TABLE animals ADD COLUMN {name} {sqlite_type}")
+      conn.commit()
 
 
 def inject_farm_theme(is_login_screen=False):
@@ -1269,7 +1323,10 @@ def build_category_gender_summary(df_animals):
       age_col = sub["age_stage"] if "age_stage" in sub.columns else pd.Series([""] * len(sub), index=sub.index)
       ag_series = [
           classify_age_gender(sx, ag)
-          for sx, ag in zip(sub["sex"], age_col)
+          for sx, ag in zip(
+              [g if str(g or "").strip() not in ("", "Unknown / Not yet determined") else sx for g, sx in zip(sub.get("gender", pd.Series([""] * len(sub), index=sub.index)), sub["sex"])],
+              age_col,
+          )
       ]
       ag_s = pd.Series(ag_series)
       adult_f = int((ag_s == "Adult Female").sum())
@@ -1317,6 +1374,7 @@ def build_category_gender_summary(df_animals):
 
 pg_engine, db_status_msg = get_pg_engine()
 init_db(pg_engine)
+ensure_animal_detail_columns(pg_engine)
 
 NAV_SECTIONS_BASE = [
     "🏡 Farm Overview & Gallery",
@@ -1749,7 +1807,7 @@ elif nav == "🐾 Animals & Categories":
       _ag_sub = pd.Series([
           classify_age_gender(sx, ag)
           for sx, ag in zip(
-              sub_active["sex"],
+              [g if str(g or "").strip() not in ("", "Unknown / Not yet determined") else sx for g, sx in zip(sub_active.get("gender", pd.Series([""] * len(sub_active), index=sub_active.index)), sub_active["sex"])],
               sub_active["age_stage"] if "age_stage" in sub_active.columns else [""] * len(sub_active)
           )
       ])
@@ -1781,23 +1839,41 @@ elif nav == "🐾 Animals & Categories":
           key_prefix=f"anim_room_{active_cat}",
           placeholder=f"e.g., {prof['housing_presets'][0]}",
       )
-      age_stage = st.selectbox(
-          "Age Group (Adult vs. Young)",
-          ["Adult", "Young"],
-          key=f"anim_age_stage_{active_cat}",
-      )
+      st.markdown("#### Individual Animal Identity")
+      d1, d2, d3 = st.columns(3)
+      id_number = d1.text_input(
+          f"{active_cat} ID / Ear Tag / Ring Number (optional)",
+          placeholder=f"e.g., {prof['id_prefix']}-101",
+          help="Every individually managed animal should have its own unique tag or system ID.",
+      ).strip()
+      animal_name = d2.text_input("Animal Name / Call Name (optional)", placeholder="e.g. Akua")
+      gender = d3.selectbox("Biological Sex", ["Female", "Male", "Unknown / Not yet determined"])
+      d4, d5, d6 = st.columns(3)
+      species_detail = d4.selectbox("Specific Species", prof.get("species_options", [active_cat]), key=f"species_detail_{active_cat}") if active_cat == "Other Livestock" else d4.text_input("Species", value=active_cat, disabled=True)
+      breed = d5.text_input("Breed / Strain / Variety", placeholder="e.g. local, crossbred, improved")
+      age_stage = d6.selectbox("Life Stage", ["Young", "Adult", "Senior", "Unknown"], key=f"anim_age_stage_{active_cat}")
       sex = editable_text_dropdown(
-          "Sex / Gender & Class (Adult/Young Male or Female)",
+          "Species-specific Class (e.g. cow, bull, doe, buck, hen, drake)",
           prof["sex_options"],
           key_prefix=f"anim_sex_{active_cat}",
-          placeholder="Select or type Male / Female...",
+          placeholder="Select or type the animal class...",
+          default_blank=True,
       )
+      d7, d8, d9 = st.columns(3)
+      coat_colour = d7.text_input("Colour / Coat / Feather Description")
+      identifying_marks = d8.text_input("Distinctive Marks / Identification Features")
+      identification_method = d9.selectbox("Identification Method", ["Ear tag", "Neck tag", "Leg ring", "Brand", "Microchip", "Tattoo", "Photo / Visual ID", "Other"])
+      d10, d11, d12 = st.columns(3)
+      source_of_animal = d10.selectbox("Animal Source", ["Born on this farm", "Purchased", "Transferred in", "Donated", "Other / Unknown"])
+      dam_id = d11.text_input("Mother / Dam ID (if known)")
+      sire_id = d12.text_input("Father / Sire ID (if known)")
       c3, c4 = st.columns(2)
-      id_number = c3.text_input(
-          f"{active_cat} ID / Tag Number (optional)",
-          placeholder=f"e.g., {prof['id_prefix']}-101",
-      ).strip()
-      cost = c4.number_input("Purchase / Acquisition Cost", min_value=0.0, step=10.0)
+      cost = c3.number_input("Purchase / Acquisition Cost", min_value=0.0, step=10.0)
+      reproductive_status = c4.selectbox("Reproductive Status", ["Not recorded", "Not applicable", "Intact", "Pregnant", "Lactating", "Breeding male", "Castrated / Spayed", "Retired"])
+      cwt1, cwt2 = st.columns(2)
+      birth_weight_kg = cwt1.number_input("Birth Weight (kg, if known)", min_value=0.0, step=0.1)
+      current_weight_kg = cwt2.number_input("Current Weight (kg, optional)", min_value=0.0, step=0.5)
+      animal_notes = st.text_area("Individual Animal Notes / History", placeholder="Temperament, source details, special care, identification notes...")
       c5, c6, c7, c8 = st.columns(4)
       with c5:
         date_brought = date_input_with_display(
@@ -1832,7 +1908,7 @@ elif nav == "🐾 Animals & Categories":
             else f"{prof['id_prefix']}-{uuid.uuid4().hex[:5].upper()}"
         )
         final_room = room_number if room_number else prof["housing_presets"][0]
-        final_sex = sex if sex else prof["sex_options"][0]
+        final_sex = sex if sex else gender
         auto_ag_label = classify_age_gender(final_sex, age_stage)
         final_age_stage = "Young" if auto_ag_label.startswith("Young") else age_stage
         existing_in_group = read_df(
@@ -1853,8 +1929,11 @@ elif nav == "🐾 Animals & Categories":
                 INSERT INTO animals (
                     id_number, animal_type, room_number, date_brought,
                     sex, age_stage, cost, date_of_birth, crossing_date, farrow_date,
-                    plan_buy_date, plan_sell_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    plan_buy_date, plan_sell_date, animal_name, species_detail, breed,
+                    gender, coat_colour, identifying_marks, identification_method,
+                    source_of_animal, dam_id, sire_id, birth_weight_kg, current_weight_kg,
+                    weight_recorded_on, reproductive_status, animal_notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     final_id,
@@ -1869,6 +1948,21 @@ elif nav == "🐾 Animals & Categories":
                     farrow_date,
                     plan_buy_date,
                     plan_sell_date,
+                    animal_name.strip(),
+                    species_detail,
+                    breed.strip(),
+                    gender,
+                    coat_colour.strip(),
+                    identifying_marks.strip(),
+                    identification_method,
+                    source_of_animal,
+                    dam_id.strip(),
+                    sire_id.strip(),
+                    float(birth_weight_kg),
+                    float(current_weight_kg),
+                    date.today().isoformat() if current_weight_kg > 0 else "",
+                    reproductive_status,
+                    animal_notes.strip(),
                 ),
             )
             st.success(
@@ -1887,9 +1981,13 @@ elif nav == "🐾 Animals & Categories":
   if not df_animals.empty:
     df_animals_enriched = df_animals.copy()
     _enr_age = df_animals_enriched["age_stage"] if "age_stage" in df_animals_enriched.columns else [""] * len(df_animals_enriched)
+    _gender_values = df_animals_enriched["gender"] if "gender" in df_animals_enriched.columns else pd.Series([""] * len(df_animals_enriched), index=df_animals_enriched.index)
+    _sex_values = [g if str(g or "").strip() not in ("", "Unknown / Not yet determined") else sx for g, sx in zip(_gender_values, df_animals_enriched["sex"])]
     df_animals_enriched["age_gender_group"] = [
-        classify_age_gender(sx, ag) for sx, ag in zip(df_animals_enriched["sex"], _enr_age)
+        classify_age_gender(sx, ag) for sx, ag in zip(_sex_values, _enr_age)
     ]
+    if "date_of_birth" in df_animals_enriched.columns:
+      df_animals_enriched["calculated_age"] = df_animals_enriched["date_of_birth"].apply(calculate_animal_age)
 
     st.markdown("---")
     st.subheader(f"🐾 Individual Animal Records ({active_cat}) & CSV Download")
@@ -1917,7 +2015,9 @@ elif nav == "🐾 Animals & Categories":
       )
 
     if not df_active_records.empty:
-      st.dataframe(df_active_records, use_container_width=True, hide_index=True)
+      detail_cols = [c for c in ["id_number", "animal_name", "species_detail", "breed", "gender", "sex", "date_of_birth", "calculated_age", "age_stage", "room_number", "coat_colour", "identifying_marks", "current_weight_kg", "status"] if c in df_active_records.columns]
+      st.dataframe(df_active_records[detail_cols], use_container_width=True, hide_index=True)
+      st.caption("The CSV export above includes the complete stored profile and history fields.")
     else:
       st.info(f"No individual records for {active_cat} yet.")
 
@@ -3458,6 +3558,30 @@ elif nav == "🛡️ Admin User & Password Control":
             value=clean_str_val(row_adm_edit["plan_sell_date"]),
         ).strip()
 
+        st.markdown("#### Detailed Individual Profile")
+        ac1, ac2, ac3 = st.columns(3)
+        edit_animal_name = ac1.text_input("Animal Name", value=clean_str_val(row_adm_edit.get("animal_name", "")))
+        edit_species_detail = ac2.text_input("Specific Species", value=clean_str_val(row_adm_edit.get("species_detail", "")))
+        edit_breed = ac3.text_input("Breed / Strain", value=clean_str_val(row_adm_edit.get("breed", "")))
+        ac4, ac5, ac6 = st.columns(3)
+        gender_opts = ["Female", "Male", "Unknown / Not yet determined"]
+        current_gender = clean_str_val(row_adm_edit.get("gender", "Unknown / Not yet determined")) or "Unknown / Not yet determined"
+        if current_gender not in gender_opts: gender_opts.append(current_gender)
+        edit_gender = ac4.selectbox("Biological Sex", gender_opts, index=gender_opts.index(current_gender))
+        edit_colour = ac5.text_input("Colour / Coat", value=clean_str_val(row_adm_edit.get("coat_colour", "")))
+        edit_marks = ac6.text_input("Distinctive Marks", value=clean_str_val(row_adm_edit.get("identifying_marks", "")))
+        ac7, ac8, ac9 = st.columns(3)
+        edit_id_method = ac7.text_input("Identification Method", value=clean_str_val(row_adm_edit.get("identification_method", "")))
+        edit_source = ac8.text_input("Animal Source", value=clean_str_val(row_adm_edit.get("source_of_animal", "")))
+        edit_repro = ac9.text_input("Reproductive Status", value=clean_str_val(row_adm_edit.get("reproductive_status", "")))
+        ac10, ac11, ac12 = st.columns(3)
+        edit_dam = ac10.text_input("Dam / Mother ID", value=clean_str_val(row_adm_edit.get("dam_id", "")))
+        edit_sire = ac11.text_input("Sire / Father ID", value=clean_str_val(row_adm_edit.get("sire_id", "")))
+        edit_birth_weight = ac12.number_input("Birth Weight (kg)", min_value=0.0, value=safe_float(row_adm_edit.get("birth_weight_kg", 0), 0.0), step=0.1)
+        ac13, ac14 = st.columns(2)
+        edit_current_weight = ac13.number_input("Current Weight (kg)", min_value=0.0, value=safe_float(row_adm_edit.get("current_weight_kg", 0), 0.0), step=0.5)
+        edit_animal_notes = ac14.text_area("Animal Notes / History", value=clean_str_val(row_adm_edit.get("animal_notes", "")))
+
         b_upd, b_del = st.columns(2)
         save_edit_btn = b_upd.form_submit_button("💾 Update Animal Record", type="primary")
         del_edit_btn = b_del.form_submit_button("🗑️ Delete This Animal Record")
@@ -3469,7 +3593,11 @@ elif nav == "🛡️ Admin User & Password Control":
               UPDATE animals SET
                   animal_type = ?, room_number = ?, date_brought = ?, sex = ?,
                   age_stage = ?, cost = ?, date_of_birth = ?, crossing_date = ?, farrow_date = ?,
-                  status = ?, plan_buy_date = ?, plan_sell_date = ?
+                  status = ?, plan_buy_date = ?, plan_sell_date = ?, animal_name = ?,
+                  species_detail = ?, breed = ?, gender = ?, coat_colour = ?,
+                  identifying_marks = ?, identification_method = ?, source_of_animal = ?,
+                  dam_id = ?, sire_id = ?, birth_weight_kg = ?, current_weight_kg = ?,
+                  weight_recorded_on = ?, reproductive_status = ?, animal_notes = ?
               WHERE animal_type = ? AND id_number = ?
               """,
               (
@@ -3485,6 +3613,21 @@ elif nav == "🛡️ Admin User & Password Control":
                   new_status,
                   new_pbuy,
                   new_psell,
+                  edit_animal_name.strip(),
+                  edit_species_detail.strip(),
+                  edit_breed.strip(),
+                  edit_gender,
+                  edit_colour.strip(),
+                  edit_marks.strip(),
+                  edit_id_method.strip(),
+                  edit_source.strip(),
+                  edit_dam.strip(),
+                  edit_sire.strip(),
+                  float(edit_birth_weight),
+                  float(edit_current_weight),
+                  date.today().isoformat() if edit_current_weight > 0 else "",
+                  edit_repro.strip(),
+                  edit_animal_notes.strip(),
                   adm_grp_choice,
                   str(edit_aid_adm),
               ),
