@@ -1186,14 +1186,23 @@ def _convert_sql_and_params(query, params, pg_mode):
   return "".join(rebuilt), bind_params
 
 
-def read_df(engine, query, params=()):
-  pg_mode = use_postgres(engine)
+@st.cache_data(ttl=30, show_spinner=False)
+def _read_df_cached(query, params, pg_mode, database_cache_key):
+  """Cache read-only table queries briefly to avoid repeating full scans on reruns."""
   sql_str, bind_vals = _convert_sql_and_params(query, params, pg_mode)
   if pg_mode:
+    engine, _status = get_pg_engine()
     with engine.connect() as conn:
       return pd.read_sql(sqlalchemy.text(sql_str), conn, params=bind_vals)
   with sqlite3.connect(SQLITE_PATH) as conn:
     return pd.read_sql(sql_str, conn, params=params)
+
+
+def read_df(engine, query, params=()):
+  pg_mode = use_postgres(engine)
+  # Include the configured backend in the cache key without exposing credentials.
+  database_cache_key = str(hash(get_configured_db_url() or os.path.abspath(SQLITE_PATH)))
+  return _read_df_cached(query, tuple(params), pg_mode, database_cache_key)
 
 
 def exec_sql(engine, query, params=()):
@@ -1206,6 +1215,10 @@ def exec_sql(engine, query, params=()):
     with sqlite3.connect(SQLITE_PATH) as conn:
       conn.execute(sql_str, params)
       conn.commit()
+  try:
+    _read_df_cached.clear()
+  except Exception:
+    pass
 
 
 def authenticate_user(engine, username, password):
@@ -1249,7 +1262,29 @@ def calc_days_spent_and_left(start_str, finish_str):
 def to_csv_bytes(df):
   if df is None or df.empty:
     return b""
-  return df.to_csv(index=False).encode("utf-8")
+  return df.to_csv(index=False).encode("utf-8-sig")
+
+
+_TABLE_EXPORT_COUNTER = 0
+
+def render_table_with_csv(df, *args, **kwargs):
+  """Render a normal Streamlit table with a matching one-click CSV export."""
+  global _TABLE_EXPORT_COUNTER
+  _TABLE_EXPORT_COUNTER += 1
+  table_key = f"dp_table_export_{_TABLE_EXPORT_COUNTER}"
+  if df is not None and isinstance(df, pd.DataFrame):
+    if not df.empty:
+      st.download_button(
+          "⬇️ Download this table (CSV)",
+          data=to_csv_bytes(df),
+          file_name=f"dp_farms_table_{_TABLE_EXPORT_COUNTER}.csv",
+          mime="text/csv",
+          key=table_key,
+          help="Downloads the complete data shown in the table, including all displayed columns and rows.",
+      )
+    else:
+      st.caption("No records available to export from this table.")
+  st.dataframe(df, *args, **kwargs)
 
 
 def clean_str_val(val):
@@ -1690,7 +1725,7 @@ if nav == "🏡 Farm Overview & Gallery":
   st.markdown("---")
   st.subheader("📊 Individual Animals Summary: Adult & Young Females and Males")
   gender_summary_df = build_category_gender_summary(df_animals)
-  st.dataframe(gender_summary_df, use_container_width=True, hide_index=True)
+  render_table_with_csv(gender_summary_df, use_container_width=True, hide_index=True)
   st.download_button(
       "⬇️ Download Adult & Young Gender Summary (CSV)",
       data=to_csv_bytes(gender_summary_df),
@@ -1713,7 +1748,7 @@ if nav == "🏡 Farm Overview & Gallery":
           c for c in ["id_number", "animal_type", "room_number", "age_stage", "sex", "age_gender_group", "status"]
           if c in df_ov_anim.columns
       ]
-      st.dataframe(df_ov_anim[ov_cols].head(10), use_container_width=True, hide_index=True)
+      render_table_with_csv(df_ov_anim[ov_cols].head(10), use_container_width=True, hide_index=True)
     else:
       st.info("No individual animals registered yet.")
   with ov2:
@@ -1731,7 +1766,7 @@ if nav == "🏡 Farm Overview & Gallery":
           ]
           if c in df_products.columns
       ]
-      st.dataframe(
+      render_table_with_csv(
           df_products[display_cols].head(8),
           use_container_width=True,
           hide_index=True,
@@ -1963,7 +1998,7 @@ elif nav == "🐾 Animals & Categories":
   st.subheader("📊 Gender & Total Counts by Animal Category")
   df_animals = read_df(pg_engine, "SELECT * FROM animals")
   gender_tbl = build_category_gender_summary(df_animals)
-  st.dataframe(gender_tbl, use_container_width=True, hide_index=True)
+  render_table_with_csv(gender_tbl, use_container_width=True, hide_index=True)
 
   if not df_animals.empty:
     df_animals_enriched = df_animals.copy()
@@ -2003,13 +2038,13 @@ elif nav == "🐾 Animals & Categories":
 
     if not df_active_records.empty:
       detail_cols = [c for c in ["id_number", "animal_name", "species_detail", "breed", "gender", "sex", "date_of_birth", "calculated_age", "age_stage", "room_number", "coat_colour", "identifying_marks", "current_weight_kg", "status"] if c in df_active_records.columns]
-      st.dataframe(df_active_records[detail_cols], use_container_width=True, hide_index=True)
-      st.caption("The CSV export above includes the complete stored profile and history fields.")
+      render_table_with_csv(df_active_records, use_container_width=True, hide_index=True)
+      st.caption("This individual-animal register displays every stored profile field. Use the CSV download above to retain the complete records.")
     else:
       st.info(f"No individual records for {active_cat} yet.")
 
     st.subheader("📋 All Registered Animals Directory (All Categories)")
-    st.dataframe(df_animals_enriched, use_container_width=True, hide_index=True)
+    render_table_with_csv(df_animals_enriched, use_container_width=True, hide_index=True)
 
     st.info(
         "🔒 Editing or deleting registered animal records by Animal ID is restricted to the "
@@ -2246,7 +2281,7 @@ elif nav == "🥛 Animal Products & Performance":
     df_perf = pd.DataFrame(perf_rows).sort_values(
         by="Total Output Units", ascending=False
     )
-    st.dataframe(df_perf, use_container_width=True, hide_index=True)
+    render_table_with_csv(df_perf, use_container_width=True, hide_index=True)
 
     st.subheader("🔎 Inspect Individual Animal ID Product Logs & Download CSV")
     selected_inspect_id = st.selectbox(
@@ -2256,7 +2291,7 @@ elif nav == "🥛 Animal Products & Performance":
     )
     if selected_inspect_id != "All Animal IDs":
       df_filtered_prod = df_prod_all[df_prod_all["animal_id"] == selected_inspect_id]
-      st.dataframe(df_filtered_prod, use_container_width=True, hide_index=True)
+      render_table_with_csv(df_filtered_prod, use_container_width=True, hide_index=True)
       st.download_button(
           f"⬇️ Download {selected_inspect_id} Product Records (CSV)",
           data=to_csv_bytes(df_filtered_prod),
@@ -2265,7 +2300,7 @@ elif nav == "🥛 Animal Products & Performance":
           key="dl_ind_prod_csv",
       )
     else:
-      st.dataframe(df_prod_all, use_container_width=True, hide_index=True)
+      render_table_with_csv(df_prod_all, use_container_width=True, hide_index=True)
 
     st.download_button(
         "⬇️ Download ALL Product & Birth Records (CSV)",
@@ -2543,7 +2578,7 @@ elif nav == "🌾 Feed, Mortality, Death & Days":
       days_left_list.append(lf)
     df_feed["days_spent"] = days_spent_list
     df_feed["days_left"] = days_left_list
-    st.dataframe(df_feed, use_container_width=True, hide_index=True)
+    render_table_with_csv(df_feed, use_container_width=True, hide_index=True)
 
     st.download_button(
         "⬇️ Download Feed, Mortality & Death Records (CSV)",
@@ -2756,7 +2791,7 @@ elif nav == "🩺 Health & Medication":
 
   df_health = read_df(pg_engine, "SELECT * FROM health_logs ORDER BY id DESC")
   if not df_health.empty:
-    st.dataframe(df_health, use_container_width=True, hide_index=True)
+    render_table_with_csv(df_health, use_container_width=True, hide_index=True)
     st.download_button(
         "⬇️ Download Health & Medication Records (CSV)",
         data=to_csv_bytes(df_health),
@@ -2936,7 +2971,7 @@ elif nav == "📦 Inventory, Planning & Sales/P&L":
       pg_engine, "SELECT * FROM inventory_and_sales ORDER BY id DESC"
   )
   if not df_inv_sales.empty:
-    st.dataframe(df_inv_sales, use_container_width=True, hide_index=True)
+    render_table_with_csv(df_inv_sales, use_container_width=True, hide_index=True)
     st.download_button(
         "⬇️ Download Inventory & Sales Records (CSV)",
         data=to_csv_bytes(df_inv_sales),
@@ -3151,7 +3186,7 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
   )
   if not df_w_display.empty:
     st.subheader("👥 Workers, Credit Owed & Loan Balances")
-    st.dataframe(df_w_display, use_container_width=True, hide_index=True)
+    render_table_with_csv(df_w_display, use_container_width=True, hide_index=True)
     st.download_button(
         "⬇️ Download Workers Directory (CSV)",
         data=to_csv_bytes(df_w_display),
@@ -3208,7 +3243,7 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
   )
   if not df_w_history.empty:
     st.subheader("🧾 Worker Pay, Credit & Loan History")
-    st.dataframe(df_w_history, use_container_width=True, hide_index=True)
+    render_table_with_csv(df_w_history, use_container_width=True, hide_index=True)
     st.download_button(
         "⬇️ Download Worker Finance History (CSV)",
         data=to_csv_bytes(df_w_history),
@@ -3347,7 +3382,7 @@ elif nav == "🏦 Farm Loans Taken":
       pg_engine, "SELECT * FROM farm_loans ORDER BY date_taken DESC"
   )
   if not df_all_loans.empty:
-    st.dataframe(df_all_loans, use_container_width=True, hide_index=True)
+    render_table_with_csv(df_all_loans, use_container_width=True, hide_index=True)
     st.download_button(
         "⬇️ Download Farm Loans Records (CSV)",
         data=to_csv_bytes(df_all_loans),
@@ -3418,7 +3453,7 @@ elif nav == "🛡️ Admin User & Password Control":
   df_users = read_df(
       pg_engine, "SELECT id, username, full_name, role FROM users ORDER BY id ASC"
   )
-  st.dataframe(df_users, use_container_width=True, hide_index=True)
+  render_table_with_csv(df_users, use_container_width=True, hide_index=True)
   c_add, c_pwd = st.columns(2)
   with c_add:
     st.markdown("#### Create New User Account")
