@@ -1389,14 +1389,16 @@ def go_to_animal_registration(animal_category):
   st.session_state.selected_animal_type = animal_category
   st.session_state.live_animal_cat_selector = animal_category
   st.session_state.active_page = "🐾 Animals & Categories"
-  st.session_state.dp_sidebar_page_radio = "🐾 Animals & Categories"
+  # Defer sidebar radio widget-state updates until the next rerun, before
+  # the widget is instantiated. Streamlit forbids changing a widget key
+  # after that widget has been created in the current run.
   st.session_state.pending_page_jump = "🐾 Animals & Categories"
   st.rerun()
 
 
 def request_navigation(target_page):
   st.session_state.active_page = target_page
-  st.session_state.dp_sidebar_page_radio = target_page
+  # Apply the radio selection at the start of the next run, before creation.
   st.session_state.pending_page_jump = target_page
   st.rerun()
 
