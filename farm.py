@@ -745,105 +745,90 @@ def use_postgres(engine):
 
 
 def _migrate_animals_composite_pk(engine):
-  if use_postgres(engine):
-    with engine.begin() as conn:
-      # Check if animals table exists and whether (animal_type, id_number) is already PK
-      pk_cols = conn.execute(
-          sqlalchemy.text("""
-              SELECT a.attname
-              FROM pg_index i
-              JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-              WHERE i.indrelid = 'animals'::regclass AND i.indisprimary
-          """)
-      ).fetchall()
-      pk_names = [r[0] for r in pk_cols]
-      if pk_names and set(pk_names) != {"animal_type", "id_number"}:
-        conn.execute(
-            sqlalchemy.text("""
-                CREATE TABLE IF NOT EXISTS animals_v2 (
-                    id_number TEXT NOT NULL,
-                    animal_type TEXT NOT NULL,
-                    room_number TEXT NOT NULL,
-                    date_brought TEXT,
-                    sex TEXT NOT NULL,
-                    age_stage TEXT DEFAULT 'Adult',
-                    cost DOUBLE PRECISION DEFAULT 0.0,
-                    date_of_birth TEXT,
-                    crossing_date TEXT,
-                    farrow_date TEXT,
-                    status TEXT DEFAULT 'Active',
-                    plan_buy_date TEXT,
-                    plan_sell_date TEXT,
-                    PRIMARY KEY (animal_type, id_number)
-                )
-            """)
-        )
-        conn.execute(
-            sqlalchemy.text("""
-                INSERT INTO animals_v2 (
-                    id_number, animal_type, room_number, date_brought,
-                    sex, age_stage, cost, date_of_birth, crossing_date,
-                    farrow_date, status, plan_buy_date, plan_sell_date
-                )
-                SELECT
-                    TRIM(id_number), TRIM(animal_type), room_number, date_brought,
-                    sex, COALESCE(age_stage, 'Adult'), COALESCE(cost, 0.0),
-                    date_of_birth, crossing_date, farrow_date,
-                    COALESCE(status, 'Active'), plan_buy_date, plan_sell_date
-                FROM animals
-                WHERE TRIM(COALESCE(id_number, '')) <> '' AND TRIM(COALESCE(animal_type, '')) <> ''
-                ON CONFLICT (animal_type, id_number) DO NOTHING
-            """)
-        )
-        conn.execute(sqlalchemy.text("DROP TABLE animals"))
-        conn.execute(sqlalchemy.text("ALTER TABLE animals_v2 RENAME TO animals"))
-  else:
-    with sqlite3.connect(SQLITE_PATH) as conn:
-      tbl_exists = conn.execute(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='animals'"
-      ).fetchone()
-      if tbl_exists:
-        info = conn.execute("PRAGMA table_info(animals)").fetchall()
-        pk_cols = [r[1] for r in info if r[5] > 0]
-        if pk_cols and set(pk_cols) != {"animal_type", "id_number"}:
-          conn.execute("""
-              CREATE TABLE IF NOT EXISTS animals_v2 (
-                  id_number TEXT NOT NULL,
-                  animal_type TEXT NOT NULL,
-                  room_number TEXT NOT NULL,
-                  date_brought TEXT,
-                  sex TEXT NOT NULL,
-                  age_stage TEXT DEFAULT 'Adult',
-                  cost REAL DEFAULT 0.0,
-                  date_of_birth TEXT,
-                  crossing_date TEXT,
-                  farrow_date TEXT,
-                  status TEXT DEFAULT 'Active',
-                  plan_buy_date TEXT,
-                  plan_sell_date TEXT,
-                  PRIMARY KEY (animal_type, id_number)
-              )
-          """)
-          cols_present = {r[1] for r in info}
-          age_expr = "COALESCE(age_stage, 'Adult')" if "age_stage" in cols_present else "'Adult'"
-          conn.execute(f"""
-              INSERT OR IGNORE INTO animals_v2 (
-                  id_number, animal_type, room_number, date_brought,
-                  sex, age_stage, cost, date_of_birth, crossing_date,
-                  farrow_date, status, plan_buy_date, plan_sell_date
-              )
-              SELECT
-                  TRIM(id_number), TRIM(animal_type), room_number, date_brought,
-                  sex, {age_expr}, COALESCE(cost, 0.0),
-                  date_of_birth, crossing_date, farrow_date,
-                  COALESCE(status, 'Active'), plan_buy_date, plan_sell_date
-              FROM animals
-              WHERE TRIM(COALESCE(id_number, '')) <> '' AND TRIM(COALESCE(animal_type, '')) <> ''
-          """)
-          conn.execute("DROP TABLE animals")
-          conn.execute("ALTER TABLE animals_v2 RENAME TO animals")
-          conn.commit()
+  """Safely migrate legacy SQLite animal keys without discarding profile data.
 
+  PostgreSQL legacy primary keys are intentionally left untouched: rebuilding a
+  live table can break dependent indexes, constraints, and application data.
+  The application still works with the existing key constraint.
+  """
+  if use_postgres(engine):
+    return
+
+  with sqlite3.connect(SQLITE_PATH) as conn:
+    conn.execute("PRAGMA foreign_keys = OFF")
+    table = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='animals'"
+    ).fetchone()
+    if not table:
+      return
+
+    info = conn.execute("PRAGMA table_info(animals)").fetchall()
+    pk_cols = [row[1] for row in sorted(info, key=lambda row: row[5]) if row[5] > 0]
+    if set(pk_cols) == {"animal_type", "id_number"}:
+      return
+
+    # Keep established fields and any columns added by older/custom versions.
+    base_columns = [
+        ("id_number", "TEXT NOT NULL"),
+        ("animal_type", "TEXT NOT NULL"),
+        ("room_number", "TEXT NOT NULL DEFAULT 'Unassigned'"),
+        ("date_brought", "TEXT"),
+        ("sex", "TEXT NOT NULL DEFAULT 'Unspecified'"),
+        ("age_stage", "TEXT DEFAULT 'Adult'"),
+        ("cost", "REAL DEFAULT 0.0"),
+        ("date_of_birth", "TEXT"),
+        ("crossing_date", "TEXT"),
+        ("farrow_date", "TEXT"),
+        ("status", "TEXT DEFAULT 'Active'"),
+        ("plan_buy_date", "TEXT"),
+        ("plan_sell_date", "TEXT"),
+        ("animal_name", "TEXT"),
+        ("species_detail", "TEXT"),
+        ("breed", "TEXT"),
+        ("gender", "TEXT"),
+        ("coat_colour", "TEXT"),
+        ("identifying_marks", "TEXT"),
+        ("identification_method", "TEXT"),
+        ("source_of_animal", "TEXT"),
+        ("dam_id", "TEXT"),
+        ("sire_id", "TEXT"),
+        ("birth_weight_kg", "REAL DEFAULT 0"),
+        ("current_weight_kg", "REAL DEFAULT 0"),
+        ("weight_recorded_on", "TEXT"),
+        ("reproductive_status", "TEXT"),
+        ("animal_notes", "TEXT"),
+    ]
+    definitions = {name: definition for name, definition in base_columns}
+    for row in info:
+      name, declared_type = row[1], (row[2] or "TEXT")
+      if name not in definitions:
+        definitions[name] = declared_type
+
+    temp_table = "animals_migration_new"
+    conn.execute('DROP TABLE IF EXISTS "animals_migration_new"')
+    extra_defs = [
+        '"' + name.replace('"', '""') + '" ' + definition
+        for name, definition in definitions.items()
+        if name not in ("id_number", "animal_type")
+    ]
+    create_sql = (
+        'CREATE TABLE "' + temp_table + '" ('
+        '"id_number" TEXT NOT NULL, "animal_type" TEXT NOT NULL, '
+        + ", ".join(extra_defs)
+        + ', PRIMARY KEY ("animal_type", "id_number"))'
+    )
+    conn.execute(create_sql)
+
+    source_names = {row[1] for row in info}
+    copy_names = [name for name in definitions if name in source_names]
+    quoted_names = ", ".join('"' + name.replace('"', '""') + '"' for name in copy_names)
+    conn.execute(
+        'INSERT INTO "' + temp_table + '" (' + quoted_names + ') '
+        'SELECT ' + quoted_names + ' FROM "animals"'
+    )
+    conn.execute('DROP TABLE "animals"')
+    conn.execute('ALTER TABLE "' + temp_table + '" RENAME TO "animals"')
+    conn.commit()
 
 def init_db(engine):
   if use_postgres(engine):
