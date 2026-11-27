@@ -1386,25 +1386,30 @@ if "selected_animal_type" not in st.session_state:
   st.session_state.selected_animal_type = ANIMAL_CATEGORIES[0]
 if "active_page" not in st.session_state:
   st.session_state.active_page = NAV_SECTIONS_BASE[0]
+if "pending_animal_type" in st.session_state and st.session_state.pending_animal_type:
+  st.session_state.selected_animal_type = st.session_state.pending_animal_type
+  st.session_state.live_animal_cat_selector = st.session_state.pending_animal_type
+  st.session_state.pending_animal_type = None
+
 if "pending_page_jump" in st.session_state and st.session_state.pending_page_jump:
   st.session_state.active_page = st.session_state.pending_page_jump
-  st.session_state.dp_sidebar_page_radio = st.session_state.pending_page_jump
   st.session_state.pending_page_jump = None
 
 
-def go_to_animal_registration(animal_category):
-  st.session_state.selected_animal_type = animal_category
-  st.session_state.live_animal_cat_selector = animal_category
+def _apply_animal_registration_jump(animal_category):
+  st.session_state.pending_animal_type = animal_category
   st.session_state.active_page = "🐾 Animals & Categories"
   st.session_state.dp_sidebar_page_radio = "🐾 Animals & Categories"
-  st.session_state.pending_page_jump = "🐾 Animals & Categories"
+
+
+def go_to_animal_registration(animal_category):
+  _apply_animal_registration_jump(animal_category)
   st.rerun()
 
 
 def request_navigation(target_page):
   st.session_state.active_page = target_page
   st.session_state.dp_sidebar_page_radio = target_page
-  st.session_state.pending_page_jump = target_page
   st.rerun()
 
 
@@ -1649,12 +1654,13 @@ if nav == "🏡 Farm Overview & Gallery":
   for idx, cat in enumerate(ANIMAL_CATEGORIES):
     with g_cols[idx % 4]:
       render_uniform_image(ANIMAL_IMAGES[cat], caption=cat, hero=False)
-      if st.button(
+      st.button(
           f"🖼️ Open {cat} Registration",
           key=f"overview_img_jump_{idx}",
           use_container_width=True,
-      ):
-        go_to_animal_registration(cat)
+          on_click=_apply_animal_registration_jump,
+          args=(cat,),
+      )
       if not df_animals.empty and "animal_type" in df_animals.columns:
         sub_c = df_animals[df_animals["animal_type"] == cat]
         count_in_cat = len(sub_c)
@@ -1684,13 +1690,14 @@ if nav == "🏡 Farm Overview & Gallery":
           """,
           unsafe_allow_html=True,
       )
-      if st.button(
+      st.button(
           f"➕ Register {cat}",
           key=f"overview_jump_{idx}",
           use_container_width=True,
           type="primary",
-      ):
-        go_to_animal_registration(cat)
+          on_click=_apply_animal_registration_jump,
+          args=(cat,),
+      )
 
   st.markdown("---")
   st.subheader("📊 Individual Animals Summary: Adult & Young Females and Males")
@@ -1763,18 +1770,22 @@ elif nav == "🐾 Animals & Categories":
           if st.session_state.selected_animal_type == cat
           else f"Select {cat}"
       )
-      if st.button(btn_label, key=f"img_jump_{idx}", use_container_width=True):
-        go_to_animal_registration(cat)
+      st.button(
+          btn_label,
+          key=f"img_jump_{idx}",
+          use_container_width=True,
+          on_click=_apply_animal_registration_jump,
+          args=(cat,),
+      )
 
   st.markdown("---")
   sel_col1, sel_col2 = st.columns([1, 2])
   with sel_col1:
+    if st.session_state.get("live_animal_cat_selector") != st.session_state.selected_animal_type:
+      st.session_state.live_animal_cat_selector = st.session_state.selected_animal_type
     chosen_cat = st.selectbox(
         "Active Animal Category",
         ANIMAL_CATEGORIES,
-        index=ANIMAL_CATEGORIES.index(st.session_state.selected_animal_type)
-        if st.session_state.selected_animal_type in ANIMAL_CATEGORIES
-        else 0,
         key="live_animal_cat_selector",
     )
     if chosen_cat != st.session_state.selected_animal_type:
