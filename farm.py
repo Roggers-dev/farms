@@ -310,17 +310,19 @@ def inject_farm_theme(is_login_screen=False):
           fill: #ffffff !important;
       }}
 
-      /* Main Area Text: Deep Charcoal/Forest Ink on Warm Cream Surface */
+      /* Main Area Text & All Widget Labels (including inside forms, columns, and selectboxes) */
       .main h1, .main h2, .main h3, .main h4,
       .main p, .main span, .main label, .main li,
-      .main div[data-testid="stMarkdownContainer"],
-      .main div[data-testid="stMarkdownContainer"] p,
-      .main div[data-testid="stMarkdownContainer"] span,
-      .main div[data-testid="stMarkdownContainer"] li,
-      .main div[data-testid="stCaptionContainer"],
-      .main div[data-testid="stCaptionContainer"] p,
-      .main div[data-testid="stHeadingWithActionElements"],
-      .main div[data-testid="stHeadingWithActionElements"] * {{
+      div[data-testid="stWidgetLabel"],
+      div[data-testid="stWidgetLabel"] *,
+      div[data-testid="stMarkdownContainer"],
+      div[data-testid="stMarkdownContainer"] p,
+      div[data-testid="stMarkdownContainer"] span,
+      div[data-testid="stMarkdownContainer"] li,
+      div[data-testid="stCaptionContainer"],
+      div[data-testid="stCaptionContainer"] p,
+      div[data-testid="stHeadingWithActionElements"],
+      div[data-testid="stHeadingWithActionElements"] * {{
           color: #112416 !important;
           -webkit-text-fill-color: #112416 !important;
           opacity: 1 !important;
@@ -418,6 +420,15 @@ def inject_farm_theme(is_login_screen=False):
           border-radius: 14px !important;
           border: 2px solid #2e7d32 !important;
           box-shadow: 0 6px 20px rgba(10, 28, 15, 0.12) !important;
+      }}
+      div[data-testid="stForm"] label,
+      div[data-testid="stForm"] div[data-testid="stWidgetLabel"],
+      div[data-testid="stForm"] div[data-testid="stWidgetLabel"] * {{
+          color: #0e2213 !important;
+          -webkit-text-fill-color: #0e2213 !important;
+          font-weight: 700 !important;
+          opacity: 1 !important;
+          visibility: visible !important;
       }}
       .stTextInput input, .stNumberInput input, .stTextArea textarea,
       div[data-baseweb="input"] input, div[data-baseweb="textarea"] textarea {{
