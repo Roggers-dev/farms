@@ -274,149 +274,200 @@ def classify_age_gender(sex_val, age_stage_val=""):
 
 def inject_farm_theme(is_login_screen=False):
   bg_overlay = (
-      "linear-gradient(rgba(14, 28, 18, 0.68), rgba(14, 28, 18, 0.74))"
+      "linear-gradient(rgba(10, 26, 15, 0.78), rgba(10, 26, 15, 0.84))"
       if is_login_screen
-      else "linear-gradient(rgba(244, 248, 243, 0.84), rgba(238, 245, 236, 0.88))"
-  )
-  light_mode_contrast_css = (
-      ""
-      if is_login_screen
-      else """
-      .stApp h1, .stApp h2, .stApp h3, .stApp h4,
-      .stApp p, .stApp span, .stApp label,
-      div[data-testid="stMarkdownContainer"] p,
-      div[data-testid="stCaptionContainer"] p,
-      div[data-testid="stHeadingWithActionElements"] * {{
-          color: #142818 !important;
-      }}
-      div[data-testid="stMetric"] {{
-          background: rgba(255, 255, 255, 0.95) !important;
-          border: 1.5px solid #81c784 !important;
-          border-radius: 10px !important;
-          padding: 0.65rem 0.8rem !important;
-          box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08) !important;
-      }}
-      div[data-testid="stMetricLabel"] p,
-      div[data-testid="stMetricValue"] div {{
-          color: #142818 !important;
-      }}
-      .dp-count-badge {{
-          background: rgba(255, 255, 255, 0.96) !important;
-          color: #142818 !important;
-          border: 1.5px solid #a5d6a7 !important;
-          border-radius: 8px !important;
-          padding: 0.45rem 0.6rem !important;
-          margin: 0.35rem 0 0.5rem 0 !important;
-          font-size: 0.86rem !important;
-          line-height: 1.45 !important;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
-      }}
-      .dp-count-badge strong {{
-          color: #1b5e20 !important;
-      }}
-      """
+      else "linear-gradient(rgba(16, 42, 24, 0.72), rgba(12, 32, 18, 0.80))"
   )
   st.markdown(
       f"""
       <style>
+      /* Rich Deep Forest Farm Backdrop + Warm Cream & Emerald High-Contrast Surfaces */
       .stApp {{
           background-image: {bg_overlay}, url("{FARM_BG_URL}");
           background-size: cover;
           background-position: center;
           background-attachment: fixed;
+          color: #f4f9f4 !important;
       }}
+      .main .block-container {{
+          background: rgba(247, 250, 245, 0.96) !important;
+          border-radius: 16px !important;
+          padding: 1.5rem 2rem !important;
+          margin-top: 1rem !important;
+          margin-bottom: 2rem !important;
+          border: 2px solid #2e7d32 !important;
+          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28) !important;
+      }}
+
+      /* Top Header Bar */
       header[data-testid="stHeader"] {{
-          background: rgba(255, 255, 255, 0.88) !important;
-          border-bottom: 1px solid #c8e6c9 !important;
+          background: #102a18 !important;
+          border-bottom: 2px solid #43a047 !important;
       }}
       header[data-testid="stHeader"] button,
       header[data-testid="stHeader"] svg {{
-          color: #1b5e20 !important;
-          fill: #1b5e20 !important;
+          color: #ffffff !important;
+          fill: #ffffff !important;
       }}
-      {light_mode_contrast_css}
+
+      /* Main Area Text: Deep Charcoal/Forest Ink on Warm Cream Surface */
+      .main h1, .main h2, .main h3, .main h4,
+      .main p, .main span, .main label, .main li,
+      .main div[data-testid="stMarkdownContainer"],
+      .main div[data-testid="stMarkdownContainer"] p,
+      .main div[data-testid="stMarkdownContainer"] span,
+      .main div[data-testid="stMarkdownContainer"] li,
+      .main div[data-testid="stCaptionContainer"],
+      .main div[data-testid="stCaptionContainer"] p,
+      .main div[data-testid="stHeadingWithActionElements"],
+      .main div[data-testid="stHeadingWithActionElements"] * {{
+          color: #112416 !important;
+          -webkit-text-fill-color: #112416 !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+      }}
+
+      /* KPI Metric Cards — Crisp Sage-White Card with Rich Forest Border */
+      div[data-testid="stMetric"] {{
+          background: #e8f3ea !important;
+          border: 2px solid #1b5e20 !important;
+          border-radius: 12px !important;
+          padding: 0.75rem 0.85rem !important;
+          box-shadow: 0 4px 12px rgba(10, 28, 15, 0.14) !important;
+      }}
+      div[data-testid="stMetric"] *,
+      div[data-testid="stMetricLabel"] *,
+      div[data-testid="stMetricValue"] * {{
+          color: #0e2213 !important;
+          -webkit-text-fill-color: #0e2213 !important;
+          font-weight: 800 !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+      }}
+
+      /* Gallery Animal Count Badges — Soft Mint-Cream Card with Crisp Dark Text */
+      .dp-count-badge {{
+          background: #e3f1e6 !important;
+          color: #0e2213 !important;
+          border: 2px solid #2e7d32 !important;
+          border-radius: 10px !important;
+          padding: 0.55rem 0.7rem !important;
+          margin: 0.45rem 0 0.6rem 0 !important;
+          font-size: 0.9rem !important;
+          line-height: 1.5 !important;
+          box-shadow: 0 3px 8px rgba(10, 28, 15, 0.12) !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+      }}
+      .dp-count-badge, .dp-count-badge * {{
+          color: #0e2213 !important;
+          -webkit-text-fill-color: #0e2213 !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+      }}
+      .dp-count-badge strong {{
+          color: #14532d !important;
+          -webkit-text-fill-color: #14532d !important;
+          font-weight: 800 !important;
+      }}
+
+      /* Uniform Animal Images */
       .uniform-animal-card img {{
           width: 100% !important;
           height: 210px !important;
           object-fit: cover !important;
           border-radius: 10px !important;
+          border: 2px solid #2e7d32 !important;
       }}
       .uniform-hero-img img {{
           width: 100% !important;
           height: 260px !important;
           object-fit: cover !important;
           border-radius: 12px !important;
+          border: 2px solid #1b5e20 !important;
       }}
+
+      /* Top Banner Card — Deep Forest Green Card with Crisp Ivory/White Text */
       .dp-login-banner {{
-          background: rgba(255, 255, 255, 0.95);
-          border-left: 8px solid #2e7d32;
-          padding: 1.4rem 1.8rem;
-          border-radius: 14px;
-          box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
-          margin-bottom: 1.2rem;
-          color: #142818;
+          background: linear-gradient(135deg, #13381e 0%, #1d522c 100%) !important;
+          border-left: 8px solid #86efac !important;
+          border: 2px solid #2e7d32 !important;
+          padding: 1.35rem 1.75rem !important;
+          border-radius: 14px !important;
+          box-shadow: 0 8px 22px rgba(10, 28, 15, 0.22) !important;
+          margin-bottom: 1.2rem !important;
       }}
       .dp-login-banner h1 {{
-          color: #1b5e20 !important;
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
           margin: 0 0 0.3rem 0 !important;
-          font-size: 2.2rem !important;
+          font-size: 2.05rem !important;
           font-weight: 800 !important;
       }}
-      .dp-login-banner p {{
-          color: #2c3e2e !important;
+      .dp-login-banner p, .dp-login-banner strong {{
+          color: #e8f5e9 !important;
+          -webkit-text-fill-color: #e8f5e9 !important;
           margin: 0 !important;
-          font-size: 1.02rem !important;
-          font-weight: 500 !important;
+          font-size: 1rem !important;
       }}
+
+      /* Forms & All Input Controls */
       div[data-testid="stForm"] {{
-          background: rgba(255, 255, 255, 0.96) !important;
+          background: #f1f7f2 !important;
           padding: 1.4rem 1.6rem !important;
           border-radius: 14px !important;
-          border: 1px solid #c8e6c9 !important;
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+          border: 2px solid #2e7d32 !important;
+          box-shadow: 0 6px 20px rgba(10, 28, 15, 0.12) !important;
       }}
-      div[data-testid="stForm"] label,
-      div[data-testid="stForm"] p,
-      div[data-testid="stForm"] span,
-      div[data-testid="stForm"] h1,
-      div[data-testid="stForm"] h2,
-      div[data-testid="stForm"] h3,
-      div[data-testid="stForm"] h4 {{
-          color: #162b1a !important;
-          font-weight: 600 !important;
-      }}
-      div[data-testid="stForm"] input,
-      div[data-testid="stForm"] textarea {{
+      .stTextInput input, .stNumberInput input, .stTextArea textarea,
+      div[data-baseweb="input"] input, div[data-baseweb="textarea"] textarea {{
           background-color: #ffffff !important;
-          color: #111111 !important;
-          border: 1.5px solid #81c784 !important;
+          color: #0e2213 !important;
+          -webkit-text-fill-color: #0e2213 !important;
+          border: 1.5px solid #2e7d32 !important;
           border-radius: 8px !important;
+          font-weight: 600 !important;
+          opacity: 1 !important;
       }}
-      /* Crisp White Date Input Box & Prominent Calendar Button */
+      div[data-baseweb="select"] > div {{
+          background-color: #ffffff !important;
+          color: #0e2213 !important;
+          -webkit-text-fill-color: #0e2213 !important;
+          border: 1.5px solid #2e7d32 !important;
+          border-radius: 8px !important;
+          font-weight: 600 !important;
+          opacity: 1 !important;
+      }}
+      div[data-baseweb="select"] span, div[data-baseweb="select"] svg {{
+          color: #0e2213 !important;
+          -webkit-text-fill-color: #0e2213 !important;
+          fill: #1b5e20 !important;
+      }}
+
+      /* Date Input Box & Calendar Button */
       div[data-testid="stDateInput"] > div,
       div[data-testid="stDateInput"] div[data-baseweb="input"],
       div[data-testid="stDateInput"] div[data-baseweb="base-input"] {{
           background-color: #ffffff !important;
           background: #ffffff !important;
-          color: #111111 !important;
-          border: 2px solid #2e7d32 !important;
+          color: #0e2213 !important;
+          border: 2px solid #1b5e20 !important;
           border-radius: 8px !important;
       }}
       div[data-testid="stDateInput"] input {{
           background-color: #ffffff !important;
-          background: #ffffff !important;
-          color: #111111 !important;
-          -webkit-text-fill-color: #111111 !important;
+          color: #0e2213 !important;
+          -webkit-text-fill-color: #0e2213 !important;
           opacity: 1 !important;
           font-weight: 700 !important;
       }}
       div[data-testid="stDateInput"] input::placeholder {{
-          color: #3b5240 !important;
-          -webkit-text-fill-color: #3b5240 !important;
+          color: #2e7d32 !important;
+          -webkit-text-fill-color: #2e7d32 !important;
           opacity: 1 !important;
       }}
       div[data-testid="stDateInput"] button {{
-          background-color: #2e7d32 !important;
+          background-color: #1b5e20 !important;
           color: #ffffff !important;
           border-radius: 6px !important;
           margin: 3px !important;
@@ -434,29 +485,67 @@ def inject_farm_theme(is_login_screen=False):
       div[data-baseweb="calendar"],
       div[data-baseweb="popover"] > div {{
           background-color: #ffffff !important;
-          color: #111111 !important;
-          border: 1.5px solid #2e7d32 !important;
+          color: #0e2213 !important;
+          border: 2px solid #1b5e20 !important;
       }}
       div[data-baseweb="calendar"] *,
       div[data-baseweb="popover"] * {{
-          color: #111111 !important;
+          color: #0e2213 !important;
+          -webkit-text-fill-color: #0e2213 !important;
       }}
-      div[data-baseweb="tab-list"] {{
-          background: rgba(255, 255, 255, 0.92);
-          padding: 0.4rem 0.6rem;
-          border-radius: 10px;
-          gap: 0.5rem;
-      }}
-      div[data-baseweb="tab-list"] button {{
-          color: #1b5e20 !important;
+
+      /* Primary & Secondary Action Buttons — Rich Forest Green & Crisp White Text */
+      .stButton > button[kind="primary"],
+      .stFormSubmitButton > button[kind="primary"] {{
+          background: linear-gradient(135deg, #14532d 0%, #1e6b38 100%) !important;
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+          border: 1.5px solid #0e3b1f !important;
+          border-radius: 8px !important;
           font-weight: 700 !important;
       }}
-      /* Sidebar Navigation Visible with Farm Background Showing Through */
+      .stButton > button[kind="primary"] *,
+      .stFormSubmitButton > button[kind="primary"] * {{
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+      }}
+      .stButton > button[kind="secondary"],
+      .stFormSubmitButton > button[kind="secondary"],
+      .stDownloadButton > button {{
+          background-color: #dff0e3 !important;
+          color: #114223 !important;
+          -webkit-text-fill-color: #114223 !important;
+          border: 1.5px solid #1e6b38 !important;
+          border-radius: 8px !important;
+          font-weight: 700 !important;
+      }}
+      .stButton > button[kind="secondary"] *,
+      .stDownloadButton > button * {{
+          color: #114223 !important;
+          -webkit-text-fill-color: #114223 !important;
+      }}
+
+      /* Tabs */
+      div[data-baseweb="tab-list"] {{
+          background: #dff0e3 !important;
+          padding: 0.4rem 0.6rem !important;
+          border-radius: 10px !important;
+          border: 1.5px solid #2e7d32 !important;
+          gap: 0.5rem !important;
+      }}
+      div[data-baseweb="tab-list"] button,
+      div[data-baseweb="tab-list"] button * {{
+          color: #0e2213 !important;
+          -webkit-text-fill-color: #0e2213 !important;
+          font-weight: 700 !important;
+      }}
+
+      /* Sidebar Navigation */
       section[data-testid="stSidebar"] {{
-          background-image: linear-gradient(rgba(18, 42, 24, 0.86), rgba(14, 34, 20, 0.90)), url("{FARM_BG_URL}") !important;
+          background-image: linear-gradient(rgba(10, 28, 15, 0.86), rgba(8, 22, 12, 0.92)), url("{FARM_BG_URL}") !important;
           background-size: cover !important;
           background-position: center !important;
-          border-right: 2px solid #4caf50 !important;
+          border-right: 3px solid #43a047 !important;
           min-width: 285px !important;
       }}
       section[data-testid="stSidebar"] > div {{
@@ -470,35 +559,38 @@ def inject_farm_theme(is_login_screen=False):
       section[data-testid="stSidebar"] label,
       section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] * {{
           color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
           opacity: 1 !important;
           visibility: visible !important;
       }}
       section[data-testid="stSidebar"] [data-testid="stRadio"] label {{
-          background-color: rgba(255, 255, 255, 0.94) !important;
-          border: 1.5px solid #81c784 !important;
+          background-color: #f4faf5 !important;
+          border: 2px solid #43a047 !important;
           border-radius: 8px !important;
-          padding: 0.45rem 0.7rem !important;
-          margin-bottom: 0.35rem !important;
+          padding: 0.48rem 0.72rem !important;
+          margin-bottom: 0.38rem !important;
           display: flex !important;
           align-items: center !important;
           width: 100% !important;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
           opacity: 1 !important;
           visibility: visible !important;
       }}
       section[data-testid="stSidebar"] [data-testid="stRadio"] label *,
       section[data-testid="stSidebar"] [data-testid="stRadio"] label p,
       section[data-testid="stSidebar"] [data-testid="stRadio"] label span {{
-          color: #112616 !important;
-          -webkit-text-fill-color: #112616 !important;
+          color: #0e2213 !important;
+          -webkit-text-fill-color: #0e2213 !important;
           font-weight: 700 !important;
           font-size: 0.92rem !important;
           opacity: 1 !important;
           visibility: visible !important;
       }}
       section[data-testid="stSidebar"] button {{
-          background-color: #2e7d32 !important;
+          background-color: #1e6b38 !important;
           color: #ffffff !important;
-          border: 1px solid #a5d6a7 !important;
+          -webkit-text-fill-color: #ffffff !important;
+          border: 1.5px solid #86efac !important;
           border-radius: 8px !important;
           font-weight: 700 !important;
           opacity: 1 !important;
