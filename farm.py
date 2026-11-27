@@ -325,6 +325,15 @@ def inject_farm_theme(is_login_screen=False):
           background-position: center;
           background-attachment: fixed;
       }}
+      header[data-testid="stHeader"] {{
+          background: rgba(255, 255, 255, 0.92) !important;
+          border-bottom: 1px solid #c8e6c9 !important;
+      }}
+      header[data-testid="stHeader"] button,
+      header[data-testid="stHeader"] svg {{
+          color: #1b5e20 !important;
+          fill: #1b5e20 !important;
+      }}
       {light_mode_contrast_css}
       .uniform-animal-card img {{
           width: 100% !important;
@@ -383,26 +392,44 @@ def inject_farm_theme(is_login_screen=False):
           border: 1.5px solid #81c784 !important;
           border-radius: 8px !important;
       }}
+      /* Make Date Inputs & Calendar Trigger Button Crisp White with High-Contrast Dark Text & Icon */
+      div[data-testid="stDateInput"] > div,
+      div[data-testid="stDateInput"] div[data-baseweb="input"],
+      div[data-testid="stDateInput"] div[data-baseweb="base-input"] {{
+          background-color: #ffffff !important;
+          background: #ffffff !important;
+          color: #111111 !important;
+          border: 2px solid #2e7d32 !important;
+          border-radius: 8px !important;
+      }}
       div[data-testid="stDateInput"] input {{
           background-color: #ffffff !important;
+          background: #ffffff !important;
           color: #111111 !important;
           -webkit-text-fill-color: #111111 !important;
           opacity: 1 !important;
-          border: 1.5px solid #2e7d32 !important;
-          border-radius: 8px !important;
-          font-weight: 600 !important;
+          font-weight: 700 !important;
       }}
-      div[data-testid="stDateInput"] div[data-baseweb="input"] {{
+      div[data-testid="stDateInput"] input::placeholder {{
+          color: #4a5d4e !important;
+          -webkit-text-fill-color: #4a5d4e !important;
+          opacity: 1 !important;
+      }}
+      div[data-testid="stDateInput"] svg,
+      div[data-testid="stDateInput"] button {{
+          color: #1b5e20 !important;
+          fill: #1b5e20 !important;
+          background-color: #e8f5e9 !important;
+          border-radius: 6px !important;
+      }}
+      div[data-baseweb="calendar"],
+      div[data-baseweb="popover"] > div {{
           background-color: #ffffff !important;
           color: #111111 !important;
           border: 1.5px solid #2e7d32 !important;
-          border-radius: 8px !important;
       }}
-      div[data-baseweb="calendar"] {{
-          background-color: #ffffff !important;
-          color: #111111 !important;
-      }}
-      div[data-baseweb="calendar"] * {{
+      div[data-baseweb="calendar"] *,
+      div[data-baseweb="popover"] * {{
           color: #111111 !important;
       }}
       div[data-baseweb="tab-list"] {{
@@ -415,11 +442,51 @@ def inject_farm_theme(is_login_screen=False):
           color: #1b5e20 !important;
           font-weight: 700 !important;
       }}
+      /* Make Sidebar Wide Enough, Bright & Crisp So All Page Labels & Buttons Are 100% Visible */
       section[data-testid="stSidebar"] {{
-          background-color: rgba(24, 48, 30, 0.97) !important;
+          background-color: #f4f9f4 !important;
+          border-right: 2px solid #2e7d32 !important;
+          min-width: 290px !important;
       }}
-      section[data-testid="stSidebar"] * {{
-          color: #f1f8e9 !important;
+      section[data-testid="stSidebar"] > div {{
+          background-color: #f4f9f4 !important;
+      }}
+      section[data-testid="stSidebar"] h1,
+      section[data-testid="stSidebar"] h2,
+      section[data-testid="stSidebar"] h3,
+      section[data-testid="stSidebar"] p,
+      section[data-testid="stSidebar"] span,
+      section[data-testid="stSidebar"] label,
+      section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] * {{
+          color: #142818 !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+          white-space: normal !important;
+      }}
+      section[data-testid="stSidebar"] div[role="radiogroup"] label {{
+          background-color: #ffffff !important;
+          border: 1.5px solid #a5d6a7 !important;
+          border-radius: 8px !important;
+          padding: 0.45rem 0.65rem !important;
+          margin-bottom: 0.35rem !important;
+          display: flex !important;
+          align-items: center !important;
+          width: 100% !important;
+      }}
+      section[data-testid="stSidebar"] div[role="radiogroup"] label p {{
+          color: #142818 !important;
+          font-weight: 700 !important;
+          font-size: 0.92rem !important;
+      }}
+      section[data-testid="stSidebar"] button {{
+          background-color: #2e7d32 !important;
+          color: #ffffff !important;
+          border: none !important;
+          border-radius: 8px !important;
+          font-weight: 700 !important;
+      }}
+      section[data-testid="stSidebar"] button * {{
+          color: #ffffff !important;
       }}
       </style>
       """,
