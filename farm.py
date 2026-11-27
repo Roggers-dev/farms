@@ -58,7 +58,7 @@ ANIMAL_PROFILES = {
         "housing_label": "Pigsty / Pen Number",
         "housing_presets": ["Pigsty-01", "Pigsty-02", "Farrowing Pen-01", "Grower Pen-01", "Boar Pen-01"],
         "id_prefix": "PIG",
-        "sex_options": ["Sow (Female)", "Boar (Male)", "Gilt (Young Female)", "Female", "Male", "Piglets Batch", "Mixed Batch"],
+        "sex_options": ["Adult Female (Sow)", "Adult Male (Boar)", "Young Female (Gilt / Piglet)", "Young Male (Young Boar / Piglet)", "Piglets Batch", "Mixed Batch"],
         "repro_event_label": "Mating / Crossing Date",
         "birth_event_label": "Farrowing Date (Piglets)",
         "product_categories": [
@@ -82,7 +82,7 @@ ANIMAL_PROFILES = {
         "housing_label": "Coop / Poultry House",
         "housing_presets": ["Broiler House-A", "Layer House-B", "Brooder Room-1", "Battery Cage-1", "Chicks Pen-1"],
         "id_prefix": "PLT",
-        "sex_options": ["Layers (Hens - Female)", "Cockerels (Male)", "Female", "Male", "Broilers (Mixed)", "Day-Old Chicks Batch"],
+        "sex_options": ["Adult Female (Layer / Hen)", "Adult Male (Cockerel / Rooster)", "Young Female (Pullet / Chick)", "Young Male (Cockerel Chick)", "Broilers (Mixed)", "Day-Old Chicks Batch"],
         "repro_event_label": "Incubation / Hatchery Set Date",
         "birth_event_label": "Hatching Date (Chicks)",
         "product_categories": [
@@ -107,7 +107,7 @@ ANIMAL_PROFILES = {
         "housing_label": "Kraal / Barn / Paddock",
         "housing_presets": ["Kraal-01", "Dairy Barn-A", "Calf Pen-01", "Paddock-North", "Quarantine Kraal"],
         "id_prefix": "CTL",
-        "sex_options": ["Cow (Female)", "Bull (Male)", "Heifer (Young Female)", "Female", "Male", "Calf", "Mixed Herd"],
+        "sex_options": ["Adult Female (Cow)", "Adult Male (Bull)", "Young Female (Heifer / Calf)", "Young Male (Bull Calf)", "Calf (Unspecified)", "Mixed Herd"],
         "repro_event_label": "Service / AI Crossing Date",
         "birth_event_label": "Calving Date (Calf Birth)",
         "product_categories": [
@@ -131,7 +131,7 @@ ANIMAL_PROFILES = {
         "housing_label": "Goat Shed / Pen",
         "housing_presets": ["Goat Shed-01", "Kidding Pen-01", "Buck Pen-01", "Doe Pen-02", "Grazing Paddock-1"],
         "id_prefix": "GOT",
-        "sex_options": ["Doe (Female)", "Buck (Male)", "Female", "Male", "Kid (Young)", "Mixed Flock"],
+        "sex_options": ["Adult Female (Doe)", "Adult Male (Buck)", "Young Female (Doeling / Kid)", "Young Male (Buckling / Kid)", "Kid (Young)", "Mixed Flock"],
         "repro_event_label": "Breeding / Mating Date",
         "birth_event_label": "Kidding Date (Goat Kids)",
         "product_categories": [
@@ -155,7 +155,7 @@ ANIMAL_PROFILES = {
         "housing_label": "Sheep Fold / Pen",
         "housing_presets": ["Sheep Fold-01", "Lambing Pen-01", "Ram Pen-01", "Ewe Pen-02", "Pasture Block-A"],
         "id_prefix": "SHP",
-        "sex_options": ["Ewe (Female)", "Ram (Male)", "Female", "Male", "Lamb (Young)", "Mixed Flock"],
+        "sex_options": ["Adult Female (Ewe)", "Adult Male (Ram)", "Young Female (Ewe Lamb)", "Young Male (Ram Lamb)", "Lamb (Young)", "Mixed Flock"],
         "repro_event_label": "Tupping / Mating Date",
         "birth_event_label": "Lambing Date (Lambs)",
         "product_categories": [
@@ -179,7 +179,7 @@ ANIMAL_PROFILES = {
         "housing_label": "Hutch / Cage Row",
         "housing_presets": ["Hutch Row-A", "Kindling Box-01", "Buck Cage-01", "Grower Cage-02", "Rabbitry Unit-1"],
         "id_prefix": "RBT",
-        "sex_options": ["Doe (Female)", "Buck (Male)", "Female", "Male", "Kits / Bunnies", "Mixed Colony"],
+        "sex_options": ["Adult Female (Doe)", "Adult Male (Buck)", "Young Female (Junior Doe / Kit)", "Young Male (Junior Buck / Kit)", "Kits / Bunnies", "Mixed Colony"],
         "repro_event_label": "Mating / Service Date",
         "birth_event_label": "Kindling Date (Kits Born)",
         "product_categories": [
@@ -203,7 +203,7 @@ ANIMAL_PROFILES = {
         "housing_label": "Enclosure / Pond / Pen",
         "housing_presets": ["Enclosure-01", "Pen-A", "Pond-01", "House-01"],
         "id_prefix": "ANM",
-        "sex_options": ["Female", "Male", "Mixed Batch"],
+        "sex_options": ["Adult Female", "Adult Male", "Young Female", "Young Male", "Mixed Batch"],
         "repro_event_label": "Crossing / Mating Date",
         "birth_event_label": "Birth / Hatch Date",
         "product_categories": [
@@ -241,8 +241,8 @@ def classify_gender(sex_val):
   s = str(sex_val or "").strip().lower()
   if not s:
     return "Unspecified"
-  female_keywords = ["female", "sow", "gilt", "hen", "layer", "cow", "heifer", "doe", "ewe"]
-  male_keywords = ["male", "boar", "cockerel", "rooster", "bull", "buck", "ram"]
+  female_keywords = ["female", "sow", "gilt", "pullet", "doeling", "hen", "layer", "cow", "heifer", "doe", "ewe"]
+  male_keywords = ["male", "boar", "buckling", "cockerel", "rooster", "bull", "buck", "ram"]
   # Check female before male because 'female' contains 'male'
   for kw in female_keywords:
     if kw in s:
@@ -250,7 +250,26 @@ def classify_gender(sex_val):
   for kw in male_keywords:
     if kw in s:
       return "Male"
-  return "Mixed / Young / Other"
+  return "Mixed / Unspecified"
+
+
+def classify_age_gender(sex_val, age_stage_val=""):
+  """Classifies an animal into Adult Female, Adult Male, Young Female, Young Male, or Mixed/Other."""
+  s = str(sex_val or "").strip().lower()
+  st_stage = str(age_stage_val or "").strip().lower()
+  gender = classify_gender(s)
+
+  young_keywords = [
+      "young", "gilt", "pullet", "heifer", "calf", "kid", "doeling",
+      "buckling", "lamb", "kit", "bunny", "bunnies", "piglet", "chick", "junior"
+  ]
+  is_young = (st_stage == "young") or any(yk in s for yk in young_keywords)
+
+  if gender == "Female":
+    return "Young Female" if is_young else "Adult Female"
+  if gender == "Male":
+    return "Young Male" if is_young else "Adult Male"
+  return "Mixed / Other"
 
 
 def inject_farm_theme(is_login_screen=False):
@@ -514,6 +533,7 @@ def init_db(engine):
                     room_number TEXT NOT NULL,
                     date_brought TEXT,
                     sex TEXT NOT NULL,
+                    age_stage TEXT DEFAULT 'Adult',
                     cost DOUBLE PRECISION DEFAULT 0.0,
                     date_of_birth TEXT,
                     crossing_date TEXT,
@@ -549,6 +569,7 @@ def init_db(engine):
                 )
             """)
       )
+      conn.execute(sqlalchemy.text("ALTER TABLE animals ADD COLUMN IF NOT EXISTS age_stage TEXT DEFAULT 'Adult'"))
       for col_ddl in [
           "ALTER TABLE feed_and_mortality ADD COLUMN IF NOT EXISTS food_quantity_of_what TEXT",
           "ALTER TABLE feed_and_mortality ADD COLUMN IF NOT EXISTS mortality_of_what TEXT",
@@ -681,6 +702,7 @@ def init_db(engine):
                     room_number TEXT NOT NULL,
                     date_brought TEXT,
                     sex TEXT NOT NULL,
+                    age_stage TEXT DEFAULT 'Adult',
                     cost REAL DEFAULT 0.0,
                     date_of_birth TEXT,
                     crossing_date TEXT,
@@ -713,6 +735,12 @@ def init_db(engine):
                     other_expenses REAL DEFAULT 0.0
                 )
             """)
+      anim_cols = {
+          row[1]
+          for row in conn.execute("PRAGMA table_info(animals)").fetchall()
+      }
+      if "age_stage" not in anim_cols:
+        conn.execute("ALTER TABLE animals ADD COLUMN age_stage TEXT DEFAULT 'Adult'")
       existing_cols = {
           row[1]
           for row in conn.execute("PRAGMA table_info(feed_and_mortality)").fetchall()
@@ -927,7 +955,7 @@ def safe_int(val, default=0):
 
 
 def build_category_gender_summary(df_animals):
-  """Returns Male, Female, Other/Mixed, and Total counts for every animal category."""
+  """Returns Adult Female, Adult Male, Young Female, Young Male, Mixed/Other, and Total counts for every animal category."""
   rows = []
   for cat in ANIMAL_CATEGORIES:
     if not df_animals.empty and "animal_type" in df_animals.columns:
@@ -936,30 +964,47 @@ def build_category_gender_summary(df_animals):
       sub = pd.DataFrame()
     total_cnt = len(sub)
     if not sub.empty:
-      g_series = sub["sex"].apply(classify_gender)
-      male_cnt = int((g_series == "Male").sum())
-      female_cnt = int((g_series == "Female").sum())
-      other_cnt = int((g_series == "Mixed / Young / Other").sum())
+      age_col = sub["age_stage"] if "age_stage" in sub.columns else pd.Series([""] * len(sub), index=sub.index)
+      ag_series = [
+          classify_age_gender(sx, ag)
+          for sx, ag in zip(sub["sex"], age_col)
+      ]
+      ag_s = pd.Series(ag_series)
+      adult_f = int((ag_s == "Adult Female").sum())
+      adult_m = int((ag_s == "Adult Male").sum())
+      young_f = int((ag_s == "Young Female").sum())
+      young_m = int((ag_s == "Young Male").sum())
+      other_cnt = int((ag_s == "Mixed / Other").sum())
       cost_sum = float(sub["cost"].fillna(0).sum())
     else:
-      male_cnt = 0
-      female_cnt = 0
+      adult_f = 0
+      adult_m = 0
+      young_f = 0
+      young_m = 0
       other_cnt = 0
       cost_sum = 0.0
     rows.append({
         "Animal Type": cat,
-        "Female Count": female_cnt,
-        "Male Count": male_cnt,
-        "Mixed / Young / Other": other_cnt,
+        "Adult Females": adult_f,
+        "Adult Males": adult_m,
+        "Young Females": young_f,
+        "Young Males": young_m,
+        "Total Females": adult_f + young_f,
+        "Total Males": adult_m + young_m,
+        "Mixed / Other": other_cnt,
         "Total Animals": total_cnt,
         "Total Cost": cost_sum,
     })
   summary_df = pd.DataFrame(rows)
   totals_row = pd.DataFrame([{
       "Animal Type": "ALL LIVESTOCK TOTAL",
-      "Female Count": int(summary_df["Female Count"].sum()),
-      "Male Count": int(summary_df["Male Count"].sum()),
-      "Mixed / Young / Other": int(summary_df["Mixed / Young / Other"].sum()),
+      "Adult Females": int(summary_df["Adult Females"].sum()),
+      "Adult Males": int(summary_df["Adult Males"].sum()),
+      "Young Females": int(summary_df["Young Females"].sum()),
+      "Young Males": int(summary_df["Young Males"].sum()),
+      "Total Females": int(summary_df["Total Females"].sum()),
+      "Total Males": int(summary_df["Total Males"].sum()),
+      "Mixed / Other": int(summary_df["Mixed / Other"].sum()),
       "Total Animals": int(summary_df["Total Animals"].sum()),
       "Total Cost": float(summary_df["Total Cost"].sum()),
   }])
@@ -1088,12 +1133,17 @@ df_farm_loans = read_df(pg_engine, "SELECT * FROM farm_loans")
 
 total_animals = len(df_animals)
 if not df_animals.empty:
-  _g_all = df_animals["sex"].apply(classify_gender)
-  total_females = int((_g_all == "Female").sum())
-  total_males = int((_g_all == "Male").sum())
+  _age_all = df_animals["age_stage"] if "age_stage" in df_animals.columns else pd.Series([""] * len(df_animals), index=df_animals.index)
+  _ag_all = pd.Series([classify_age_gender(sx, ag) for sx, ag in zip(df_animals["sex"], _age_all)])
+  total_adult_females = int((_ag_all == "Adult Female").sum())
+  total_adult_males = int((_ag_all == "Adult Male").sum())
+  total_young_females = int((_ag_all == "Young Female").sum())
+  total_young_males = int((_ag_all == "Young Male").sum())
 else:
-  total_females = 0
-  total_males = 0
+  total_adult_females = 0
+  total_adult_males = 0
+  total_young_females = 0
+  total_young_males = 0
 
 total_animal_cost = (
     float(df_animals["cost"].fillna(0).sum()) if not df_animals.empty else 0.0
@@ -1141,14 +1191,16 @@ total_expenses = (
 )
 net_profit_or_loss = total_sales - total_expenses
 
-k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
+k1, k2, k3, k4, k5, k6, k7, k8, k9 = st.columns(9)
 k1.metric("Total Animals", total_animals)
-k2.metric("Female Animals", total_females)
-k3.metric("Male Animals", total_males)
-k4.metric("Inventory Value", f"{total_inventory_val:,.2f}")
-k5.metric("Total Sales", f"{total_sales:,.2f}")
-k6.metric("Total Expenses", f"{total_expenses:,.2f}")
-k7.metric(
+k2.metric("Adult Females", total_adult_females)
+k3.metric("Adult Males", total_adult_males)
+k4.metric("Young Females", total_young_females)
+k5.metric("Young Males", total_young_males)
+k6.metric("Inventory Value", f"{total_inventory_val:,.2f}")
+k7.metric("Total Sales", f"{total_sales:,.2f}")
+k8.metric("Total Expenses", f"{total_expenses:,.2f}")
+k9.metric(
     "Net Profit / (Loss)",
     f"{net_profit_or_loss:,.2f}",
     delta=f"{net_profit_or_loss:,.2f}",
@@ -1219,14 +1271,26 @@ if nav == "🏡 Farm Overview & Gallery":
       if not df_animals.empty and "animal_type" in df_animals.columns:
         sub_c = df_animals[df_animals["animal_type"] == cat]
         count_in_cat = len(sub_c)
-        g_s = sub_c["sex"].apply(classify_gender) if not sub_c.empty else pd.Series(dtype=str)
-        f_cnt = int((g_s == "Female").sum()) if not sub_c.empty else 0
-        m_cnt = int((g_s == "Male").sum()) if not sub_c.empty else 0
+        if not sub_c.empty:
+          _ag_c = pd.Series([
+              classify_age_gender(sx, ag)
+              for sx, ag in zip(
+                  sub_c["sex"],
+                  sub_c["age_stage"] if "age_stage" in sub_c.columns else [""] * len(sub_c)
+              )
+          ])
+          af_cnt = int((_ag_c == "Adult Female").sum())
+          am_cnt = int((_ag_c == "Adult Male").sum())
+          yf_cnt = int((_ag_c == "Young Female").sum())
+          ym_cnt = int((_ag_c == "Young Male").sum())
+        else:
+          af_cnt = am_cnt = yf_cnt = ym_cnt = 0
       else:
-        count_in_cat = 0
-        f_cnt = 0
-        m_cnt = 0
-      st.caption(f"Total: **{count_in_cat}** | ♀ Female: **{f_cnt}** | ♂ Male: **{m_cnt}**")
+        count_in_cat = af_cnt = am_cnt = yf_cnt = ym_cnt = 0
+      st.caption(
+          f"Total: **{count_in_cat}** | Adult ♀: **{af_cnt}** · Adult ♂: **{am_cnt}** | "
+          f"Young ♀: **{yf_cnt}** · Young ♂: **{ym_cnt}**"
+      )
       if st.button(
           f"➕ Register {cat}",
           key=f"overview_jump_{idx}",
@@ -1237,18 +1301,34 @@ if nav == "🏡 Farm Overview & Gallery":
         request_navigation("🐾 Animals & Categories")
 
   st.markdown("---")
-  ov1, ov2 = st.columns([1.3, 1])
+  st.subheader("📊 Individual Animals Summary: Adult & Young Females and Males")
+  gender_summary_df = build_category_gender_summary(df_animals)
+  st.dataframe(gender_summary_df, use_container_width=True, hide_index=True)
+  st.download_button(
+      "⬇️ Download Adult & Young Gender Summary (CSV)",
+      data=to_csv_bytes(gender_summary_df),
+      file_name="dp_farms_adult_young_gender_summary.csv",
+      mime="text/csv",
+      key="dl_ov_summary_csv",
+  )
+
+  st.markdown("---")
+  ov1, ov2 = st.columns([1.15, 1])
   with ov1:
-    st.subheader("📊 Female, Male & Total Counts by Animal Type")
-    gender_summary_df = build_category_gender_summary(df_animals)
-    st.dataframe(gender_summary_df, use_container_width=True, hide_index=True)
-    st.download_button(
-        "⬇️ Download All Animals Summary (CSV)",
-        data=to_csv_bytes(gender_summary_df),
-        file_name="dp_farms_gender_category_summary.csv",
-        mime="text/csv",
-        key="dl_ov_summary_csv",
-    )
+    st.subheader("🐾 Individual Animals Registry Preview")
+    if not df_animals.empty:
+      df_ov_anim = df_animals.copy()
+      _ov_age = df_ov_anim["age_stage"] if "age_stage" in df_ov_anim.columns else [""] * len(df_ov_anim)
+      df_ov_anim["age_gender_group"] = [
+          classify_age_gender(sx, ag) for sx, ag in zip(df_ov_anim["sex"], _ov_age)
+      ]
+      ov_cols = [
+          c for c in ["id_number", "animal_type", "room_number", "age_stage", "sex", "age_gender_group", "status"]
+          if c in df_ov_anim.columns
+      ]
+      st.dataframe(df_ov_anim[ov_cols].head(10), use_container_width=True, hide_index=True)
+    else:
+      st.info("No individual animals registered yet.")
   with ov2:
     st.subheader("🥛 Recent Animal Product & Birth Output")
     if not df_products.empty:
@@ -1317,7 +1397,7 @@ elif nav == "🐾 Animals & Categories":
         hero=True,
     )
 
-    # Individual Category Gender Breakdown Card
+    # Individual Category Adult & Young Gender Breakdown Card
     sub_active = (
         df_animals[df_animals["animal_type"] == active_cat]
         if not df_animals.empty
@@ -1325,17 +1405,26 @@ elif nav == "🐾 Animals & Categories":
     )
     act_total = len(sub_active)
     if not sub_active.empty:
-      _g_sub = sub_active["sex"].apply(classify_gender)
-      act_female = int((_g_sub == "Female").sum())
-      act_male = int((_g_sub == "Male").sum())
+      _ag_sub = pd.Series([
+          classify_age_gender(sx, ag)
+          for sx, ag in zip(
+              sub_active["sex"],
+              sub_active["age_stage"] if "age_stage" in sub_active.columns else [""] * len(sub_active)
+          )
+      ])
+      act_af = int((_ag_sub == "Adult Female").sum())
+      act_am = int((_ag_sub == "Adult Male").sum())
+      act_yf = int((_ag_sub == "Young Female").sum())
+      act_ym = int((_ag_sub == "Young Male").sum())
     else:
-      act_female = 0
-      act_male = 0
-    st.markdown(f"#### 📊 {active_cat} Counts")
-    gc1, gc2, gc3 = st.columns(3)
-    gc1.metric("♀ Female", act_female)
-    gc2.metric("♂ Male", act_male)
-    gc3.metric("Total", act_total)
+      act_af = act_am = act_yf = act_ym = 0
+    st.markdown(f"#### 📊 {active_cat} Counts (Total: {act_total})")
+    gc1, gc2 = st.columns(2)
+    gc1.metric("♀ Adult Females", act_af)
+    gc2.metric("♂ Adult Males", act_am)
+    gc3, gc4 = st.columns(2)
+    gc3.metric("♀ Young Females", act_yf)
+    gc4.metric("♂ Young Males", act_ym)
 
   with sel_col2:
     st.markdown(f"### ✍️ Direct Entry Point — {active_cat}")
@@ -1351,8 +1440,13 @@ elif nav == "🐾 Animals & Categories":
           key_prefix=f"anim_room_{active_cat}",
           placeholder=f"e.g., {prof['housing_presets'][0]}",
       )
+      age_stage = st.selectbox(
+          "Age Group (Adult vs. Young)",
+          ["Adult", "Young"],
+          key=f"anim_age_stage_{active_cat}",
+      )
       sex = editable_text_dropdown(
-          "Sex / Gender (Male / Female / Class)",
+          "Sex / Gender & Class (Adult/Young Male or Female)",
           prof["sex_options"],
           key_prefix=f"anim_sex_{active_cat}",
           placeholder="Select or type Male / Female...",
@@ -1397,15 +1491,18 @@ elif nav == "🐾 Animals & Categories":
         )
         final_room = room_number if room_number else prof["housing_presets"][0]
         final_sex = sex if sex else prof["sex_options"][0]
+        # Auto-sync age_stage if user picked a clearly young preset while age_stage was Adult
+        auto_ag_label = classify_age_gender(final_sex, age_stage)
+        final_age_stage = "Young" if auto_ag_label.startswith("Young") else age_stage
         try:
           exec_sql(
               pg_engine,
               """
               INSERT INTO animals (
                   id_number, animal_type, room_number, date_brought,
-                  sex, cost, date_of_birth, crossing_date, farrow_date,
+                  sex, age_stage, cost, date_of_birth, crossing_date, farrow_date,
                   plan_buy_date, plan_sell_date
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               """,
               (
                   final_id,
@@ -1413,6 +1510,7 @@ elif nav == "🐾 Animals & Categories":
                   final_room,
                   date_brought,
                   final_sex,
+                  final_age_stage,
                   float(cost),
                   date_of_birth,
                   crossing_date,
@@ -1422,7 +1520,7 @@ elif nav == "🐾 Animals & Categories":
               ),
           )
           st.success(
-              f"Registered {active_cat} with ID `{final_id}` ({final_sex}) in `{final_room}`."
+              f"Registered {active_cat} with ID `{final_id}` ({auto_ag_label} — {final_sex}) in `{final_room}`."
           )
           st.rerun()
         except Exception as exc:
@@ -1436,7 +1534,10 @@ elif nav == "🐾 Animals & Categories":
 
   if not df_animals.empty:
     df_animals_enriched = df_animals.copy()
-    df_animals_enriched["gender_group"] = df_animals_enriched["sex"].apply(classify_gender)
+    _enr_age = df_animals_enriched["age_stage"] if "age_stage" in df_animals_enriched.columns else [""] * len(df_animals_enriched)
+    df_animals_enriched["age_gender_group"] = [
+        classify_age_gender(sx, ag) for sx, ag in zip(df_animals_enriched["sex"], _enr_age)
+    ]
 
     st.markdown("---")
     st.subheader(f"🐾 Individual Animal Records ({active_cat}) & CSV Download")
@@ -1482,7 +1583,7 @@ elif nav == "🐾 Animals & Categories":
     )
     row_to_edit = df_animals[df_animals["id_number"] == edit_aid].iloc[0]
     with st.form("edit_animal_record_form"):
-      ec1, ec2, ec3 = st.columns(3)
+      ec1, ec2, ec3, ec3b = st.columns(4)
       new_atype = ec1.selectbox(
           "Animal Category",
           ANIMAL_CATEGORIES,
@@ -1493,7 +1594,14 @@ elif nav == "🐾 Animals & Categories":
       new_room = ec2.text_input(
           "Housing / Pen / Room", value=clean_str_val(row_to_edit["room_number"])
       ).strip()
-      new_sex = ec3.text_input(
+      cur_astage = clean_str_val(row_to_edit.get("age_stage", "Adult")) or "Adult"
+      age_opts = ["Adult", "Young"]
+      if cur_astage not in age_opts:
+        age_opts.append(cur_astage)
+      new_age_stage = ec3.selectbox(
+          "Age Group (Adult / Young)", age_opts, index=age_opts.index(cur_astage)
+      )
+      new_sex = ec3b.text_input(
           "Sex / Gender (Male / Female / Class)", value=clean_str_val(row_to_edit["sex"])
       ).strip()
 
@@ -1548,7 +1656,7 @@ elif nav == "🐾 Animals & Categories":
             """
             UPDATE animals SET
                 animal_type = ?, room_number = ?, date_brought = ?, sex = ?,
-                cost = ?, date_of_birth = ?, crossing_date = ?, farrow_date = ?,
+                age_stage = ?, cost = ?, date_of_birth = ?, crossing_date = ?, farrow_date = ?,
                 status = ?, plan_buy_date = ?, plan_sell_date = ?
             WHERE id_number = ?
             """,
@@ -1557,6 +1665,7 @@ elif nav == "🐾 Animals & Categories":
                 new_room or "Unassigned",
                 new_dbrought,
                 new_sex or "Unspecified",
+                new_age_stage,
                 float(new_cost),
                 new_dob,
                 new_cross,
