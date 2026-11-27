@@ -276,7 +276,45 @@ def inject_farm_theme(is_login_screen=False):
   bg_overlay = (
       "linear-gradient(rgba(14, 28, 18, 0.72), rgba(14, 28, 18, 0.78))"
       if is_login_screen
-      else "linear-gradient(rgba(244, 248, 243, 0.94), rgba(238, 245, 236, 0.96))"
+      else "linear-gradient(rgba(244, 248, 243, 0.95), rgba(238, 245, 236, 0.97))"
+  )
+  light_mode_contrast_css = (
+      ""
+      if is_login_screen
+      else """
+      .stApp h1, .stApp h2, .stApp h3, .stApp h4,
+      .stApp p, .stApp span, .stApp label,
+      div[data-testid="stMarkdownContainer"] p,
+      div[data-testid="stCaptionContainer"] p,
+      div[data-testid="stHeadingWithActionElements"] * {
+          color: #142818 !important;
+      }
+      div[data-testid="stMetric"] {
+          background: #ffffff !important;
+          border: 1.5px solid #81c784 !important;
+          border-radius: 10px !important;
+          padding: 0.65rem 0.8rem !important;
+          box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08) !important;
+      }
+      div[data-testid="stMetricLabel"] p,
+      div[data-testid="stMetricValue"] div {
+          color: #142818 !important;
+      }
+      .dp-count-badge {
+          background: #ffffff !important;
+          color: #142818 !important;
+          border: 1.5px solid #a5d6a7 !important;
+          border-radius: 8px !important;
+          padding: 0.45rem 0.6rem !important;
+          margin: 0.35rem 0 0.5rem 0 !important;
+          font-size: 0.86rem !important;
+          line-height: 1.45 !important;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
+      }
+      .dp-count-badge strong {
+          color: #1b5e20 !important;
+      }
+      """
   )
   st.markdown(
       f"""
@@ -287,6 +325,7 @@ def inject_farm_theme(is_login_screen=False):
           background-position: center;
           background-attachment: fixed;
       }}
+      {light_mode_contrast_css}
       .uniform-animal-card img {{
           width: 100% !important;
           height: 210px !important;
@@ -1287,9 +1326,15 @@ if nav == "🏡 Farm Overview & Gallery":
           af_cnt = am_cnt = yf_cnt = ym_cnt = 0
       else:
         count_in_cat = af_cnt = am_cnt = yf_cnt = ym_cnt = 0
-      st.caption(
-          f"Total: **{count_in_cat}** | Adult ♀: **{af_cnt}** · Adult ♂: **{am_cnt}** | "
-          f"Young ♀: **{yf_cnt}** · Young ♂: **{ym_cnt}**"
+      st.markdown(
+          f"""
+          <div class="dp-count-badge">
+              <strong>Total: {count_in_cat}</strong><br/>
+              Adult ♀: <strong>{af_cnt}</strong> &nbsp;|&nbsp; Adult ♂: <strong>{am_cnt}</strong><br/>
+              Young ♀: <strong>{yf_cnt}</strong> &nbsp;|&nbsp; Young ♂: <strong>{ym_cnt}</strong>
+          </div>
+          """,
+          unsafe_allow_html=True,
       )
       if st.button(
           f"➕ Register {cat}",
