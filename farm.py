@@ -7,7 +7,6 @@ import streamlit as st
 
 try:
   import sqlalchemy
-
   SQLALCHEMY_AVAILABLE = True
 except ImportError:
   SQLALCHEMY_AVAILABLE = False
@@ -59,7 +58,7 @@ ANIMAL_PROFILES = {
         "housing_label": "Pigsty / Pen Number",
         "housing_presets": ["Pigsty-01", "Pigsty-02", "Farrowing Pen-01", "Grower Pen-01", "Boar Pen-01"],
         "id_prefix": "PIG",
-        "sex_options": ["Sow (Female)", "Boar (Male)", "Gilt (Young Female)", "Piglets Batch", "Mixed Batch"],
+        "sex_options": ["Sow (Female)", "Boar (Male)", "Gilt (Young Female)", "Female", "Male", "Piglets Batch", "Mixed Batch"],
         "repro_event_label": "Mating / Crossing Date",
         "birth_event_label": "Farrowing Date (Piglets)",
         "product_categories": [
@@ -83,7 +82,7 @@ ANIMAL_PROFILES = {
         "housing_label": "Coop / Poultry House",
         "housing_presets": ["Broiler House-A", "Layer House-B", "Brooder Room-1", "Battery Cage-1", "Chicks Pen-1"],
         "id_prefix": "PLT",
-        "sex_options": ["Layers (Hens)", "Broilers (Mixed)", "Cockerels (Male)", "Day-Old Chicks Batch"],
+        "sex_options": ["Layers (Hens - Female)", "Cockerels (Male)", "Female", "Male", "Broilers (Mixed)", "Day-Old Chicks Batch"],
         "repro_event_label": "Incubation / Hatchery Set Date",
         "birth_event_label": "Hatching Date (Chicks)",
         "product_categories": [
@@ -108,7 +107,7 @@ ANIMAL_PROFILES = {
         "housing_label": "Kraal / Barn / Paddock",
         "housing_presets": ["Kraal-01", "Dairy Barn-A", "Calf Pen-01", "Paddock-North", "Quarantine Kraal"],
         "id_prefix": "CTL",
-        "sex_options": ["Cow (Female)", "Bull (Male)", "Heifer (Young Female)", "Calf", "Mixed Herd"],
+        "sex_options": ["Cow (Female)", "Bull (Male)", "Heifer (Young Female)", "Female", "Male", "Calf", "Mixed Herd"],
         "repro_event_label": "Service / AI Crossing Date",
         "birth_event_label": "Calving Date (Calf Birth)",
         "product_categories": [
@@ -132,7 +131,7 @@ ANIMAL_PROFILES = {
         "housing_label": "Goat Shed / Pen",
         "housing_presets": ["Goat Shed-01", "Kidding Pen-01", "Buck Pen-01", "Doe Pen-02", "Grazing Paddock-1"],
         "id_prefix": "GOT",
-        "sex_options": ["Doe (Female)", "Buck (Male)", "Kid (Young)", "Mixed Flock"],
+        "sex_options": ["Doe (Female)", "Buck (Male)", "Female", "Male", "Kid (Young)", "Mixed Flock"],
         "repro_event_label": "Breeding / Mating Date",
         "birth_event_label": "Kidding Date (Goat Kids)",
         "product_categories": [
@@ -156,7 +155,7 @@ ANIMAL_PROFILES = {
         "housing_label": "Sheep Fold / Pen",
         "housing_presets": ["Sheep Fold-01", "Lambing Pen-01", "Ram Pen-01", "Ewe Pen-02", "Pasture Block-A"],
         "id_prefix": "SHP",
-        "sex_options": ["Ewe (Female)", "Ram (Male)", "Lamb (Young)", "Mixed Flock"],
+        "sex_options": ["Ewe (Female)", "Ram (Male)", "Female", "Male", "Lamb (Young)", "Mixed Flock"],
         "repro_event_label": "Tupping / Mating Date",
         "birth_event_label": "Lambing Date (Lambs)",
         "product_categories": [
@@ -180,7 +179,7 @@ ANIMAL_PROFILES = {
         "housing_label": "Hutch / Cage Row",
         "housing_presets": ["Hutch Row-A", "Kindling Box-01", "Buck Cage-01", "Grower Cage-02", "Rabbitry Unit-1"],
         "id_prefix": "RBT",
-        "sex_options": ["Doe (Female)", "Buck (Male)", "Kits / Bunnies", "Mixed Colony"],
+        "sex_options": ["Doe (Female)", "Buck (Male)", "Female", "Male", "Kits / Bunnies", "Mixed Colony"],
         "repro_event_label": "Mating / Service Date",
         "birth_event_label": "Kindling Date (Kits Born)",
         "product_categories": [
@@ -230,12 +229,28 @@ ANIMAL_PROFILES = {
 FARM_BG_URL = (
     "https://images.unsplash.com/photo-1500595046711-ee27150ad24e?auto=format&fit=crop&w=1920&q=80"
 )
-
 QUANTITY_PRESETS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000]
 
 
 def get_profile(animal_type):
   return ANIMAL_PROFILES.get(animal_type, ANIMAL_PROFILES["Other Livestock"])
+
+
+def classify_gender(sex_val):
+  """Classifies any species-specific sex/flock label into Male, Female, or Mixed/Other."""
+  s = str(sex_val or "").strip().lower()
+  if not s:
+    return "Unspecified"
+  female_keywords = ["female", "sow", "gilt", "hen", "layer", "cow", "heifer", "doe", "ewe"]
+  male_keywords = ["male", "boar", "cockerel", "rooster", "bull", "buck", "ram"]
+  # Check female before male because 'female' contains 'male'
+  for kw in female_keywords:
+    if kw in s:
+      return "Female"
+  for kw in male_keywords:
+    if kw in s:
+      return "Male"
+  return "Mixed / Young / Other"
 
 
 def inject_farm_theme(is_login_screen=False):
@@ -310,7 +325,6 @@ def inject_farm_theme(is_login_screen=False):
           border: 1.5px solid #81c784 !important;
           border-radius: 8px !important;
       }}
-      /* Ensure date inputs & calendar popups are always crisp and visible */
       div[data-testid="stDateInput"] input {{
           background-color: #ffffff !important;
           color: #111111 !important;
@@ -363,11 +377,14 @@ def render_uniform_image(url, caption="", hero=False):
 
 
 def date_input_with_display(label, key_prefix, default_date=None):
-  """Renders a standard date picker plus a guaranteed high-contrast readable date readout/picker."""
-  init_dt = default_date if isinstance(default_date, date) else date.today()
+  """Permits date to be empty (None) by default if none is selected."""
+  init_dt = default_date if isinstance(default_date, date) else None
   chosen_dt = st.date_input(label, value=init_dt, key=f"{key_prefix}_dt")
-  st.caption(f"Selected Date: **{chosen_dt.strftime('%Y-%m-%d')}**")
-  return chosen_dt
+  if chosen_dt is not None:
+    st.caption(f"Selected Date: **{chosen_dt.strftime('%Y-%m-%d')}**")
+    return chosen_dt.strftime("%Y-%m-%d")
+  st.caption("Selected Date: **Empty (None)**")
+  return ""
 
 
 def editable_text_dropdown(
@@ -396,7 +413,6 @@ def editable_text_dropdown(
       placeholder=placeholder,
       key=f"{key_prefix}_txt",
   ).strip()
-
   if typed:
     return typed
   if picked in ("-- Select or Type Custom --", "✏️ Type Custom Value"):
@@ -445,11 +461,9 @@ def get_configured_db_url():
       return str(top_url).strip()
   except Exception:
     pass
-
   env_url = os.environ.get("DATABASE_URL", "").strip()
   if env_url:
     return env_url
-
   return ""
 
 
@@ -460,11 +474,9 @@ def get_pg_engine():
   raw_url = get_configured_db_url()
   if not raw_url:
     return None, "No PostgreSQL URL configured (using SQLite)."
-
   pg_url = raw_url
   if pg_url.startswith("postgresql://") and "+psycopg2" not in pg_url:
     pg_url = pg_url.replace("postgresql://", "postgresql+psycopg2://", 1)
-
   try:
     engine = sqlalchemy.create_engine(pg_url, pool_pre_ping=True)
     with engine.connect() as conn:
@@ -500,7 +512,7 @@ def init_db(engine):
                     id_number TEXT PRIMARY KEY,
                     animal_type TEXT NOT NULL,
                     room_number TEXT NOT NULL,
-                    date_brought TEXT NOT NULL,
+                    date_brought TEXT,
                     sex TEXT NOT NULL,
                     cost DOUBLE PRECISION DEFAULT 0.0,
                     date_of_birth TEXT,
@@ -525,7 +537,7 @@ def init_db(engine):
                     quantity DOUBLE PRECISION DEFAULT 0.0,
                     unit_cost DOUBLE PRECISION DEFAULT 0.0,
                     total_cost DOUBLE PRECISION DEFAULT 0.0,
-                    date_recorded TEXT NOT NULL,
+                    date_recorded TEXT,
                     date_finish TEXT,
                     mortality_count INTEGER DEFAULT 0,
                     mortality_of_what TEXT,
@@ -545,7 +557,6 @@ def init_db(engine):
           "ALTER TABLE feed_and_mortality ADD COLUMN IF NOT EXISTS date_of_death TEXT",
       ]:
         conn.execute(sqlalchemy.text(col_ddl))
-
       conn.execute(
           sqlalchemy.text("""
                 CREATE TABLE IF NOT EXISTS health_logs (
@@ -553,7 +564,7 @@ def init_db(engine):
                     id_number TEXT NOT NULL,
                     animal_type TEXT NOT NULL,
                     room_number TEXT NOT NULL,
-                    visit_date TEXT NOT NULL,
+                    visit_date TEXT,
                     disease TEXT NOT NULL,
                     medication TEXT NOT NULL,
                     vet_cost DOUBLE PRECISION DEFAULT 0.0
@@ -571,7 +582,7 @@ def init_db(engine):
                     quantity DOUBLE PRECISION DEFAULT 1.0,
                     unit_price DOUBLE PRECISION DEFAULT 0.0,
                     total_amount DOUBLE PRECISION DEFAULT 0.0,
-                    record_date TEXT NOT NULL,
+                    record_date TEXT,
                     plan_buy_time TEXT,
                     plan_sell_time TEXT
                 )
@@ -586,12 +597,18 @@ def init_db(engine):
                     room_number TEXT,
                     product_category TEXT NOT NULL,
                     product_detail TEXT,
+                    offspring_sex TEXT DEFAULT 'Unspecified',
                     quantity DOUBLE PRECISION DEFAULT 0.0,
                     unit_label TEXT,
-                    record_date TEXT NOT NULL,
+                    record_date TEXT,
                     notes TEXT
                 )
             """)
+      )
+      conn.execute(
+          sqlalchemy.text(
+              "ALTER TABLE animal_products ADD COLUMN IF NOT EXISTS offspring_sex TEXT DEFAULT 'Unspecified'"
+          )
       )
       conn.execute(
           sqlalchemy.text("""
@@ -614,7 +631,7 @@ def init_db(engine):
                     worker_name TEXT NOT NULL,
                     action_type TEXT NOT NULL,
                     amount DOUBLE PRECISION NOT NULL,
-                    entry_date TEXT NOT NULL,
+                    entry_date TEXT,
                     notes TEXT
                 )
             """)
@@ -627,7 +644,7 @@ def init_db(engine):
                     principal_amount DOUBLE PRECISION NOT NULL,
                     amount_paid DOUBLE PRECISION DEFAULT 0.0,
                     balance_due DOUBLE PRECISION NOT NULL,
-                    date_taken TEXT NOT NULL,
+                    date_taken TEXT,
                     notes TEXT
                 )
             """)
@@ -662,7 +679,7 @@ def init_db(engine):
                     id_number TEXT PRIMARY KEY,
                     animal_type TEXT NOT NULL,
                     room_number TEXT NOT NULL,
-                    date_brought TEXT NOT NULL,
+                    date_brought TEXT,
                     sex TEXT NOT NULL,
                     cost REAL DEFAULT 0.0,
                     date_of_birth TEXT,
@@ -685,7 +702,7 @@ def init_db(engine):
                     quantity REAL DEFAULT 0.0,
                     unit_cost REAL DEFAULT 0.0,
                     total_cost REAL DEFAULT 0.0,
-                    date_recorded TEXT NOT NULL,
+                    date_recorded TEXT,
                     date_finish TEXT,
                     mortality_count INTEGER DEFAULT 0,
                     mortality_of_what TEXT,
@@ -710,14 +727,13 @@ def init_db(engine):
       for col_name, ddl in migrations.items():
         if col_name not in existing_cols:
           conn.execute(ddl)
-
       conn.execute("""
                 CREATE TABLE IF NOT EXISTS health_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     id_number TEXT NOT NULL,
                     animal_type TEXT NOT NULL,
                     room_number TEXT NOT NULL,
-                    visit_date TEXT NOT NULL,
+                    visit_date TEXT,
                     disease TEXT NOT NULL,
                     medication TEXT NOT NULL,
                     vet_cost REAL DEFAULT 0.0
@@ -733,7 +749,7 @@ def init_db(engine):
                     quantity REAL DEFAULT 1.0,
                     unit_price REAL DEFAULT 0.0,
                     total_amount REAL DEFAULT 0.0,
-                    record_date TEXT NOT NULL,
+                    record_date TEXT,
                     plan_buy_time TEXT,
                     plan_sell_time TEXT
                 )
@@ -746,12 +762,21 @@ def init_db(engine):
                     room_number TEXT,
                     product_category TEXT NOT NULL,
                     product_detail TEXT,
+                    offspring_sex TEXT DEFAULT 'Unspecified',
                     quantity REAL DEFAULT 0.0,
                     unit_label TEXT,
-                    record_date TEXT NOT NULL,
+                    record_date TEXT,
                     notes TEXT
                 )
             """)
+      prod_cols = {
+          row[1]
+          for row in conn.execute("PRAGMA table_info(animal_products)").fetchall()
+      }
+      if "offspring_sex" not in prod_cols:
+        conn.execute(
+            "ALTER TABLE animal_products ADD COLUMN offspring_sex TEXT DEFAULT 'Unspecified'"
+        )
       conn.execute("""
                 CREATE TABLE IF NOT EXISTS workers (
                     worker_id TEXT PRIMARY KEY,
@@ -770,7 +795,7 @@ def init_db(engine):
                     worker_name TEXT NOT NULL,
                     action_type TEXT NOT NULL,
                     amount REAL NOT NULL,
-                    entry_date TEXT NOT NULL,
+                    entry_date TEXT,
                     notes TEXT
                 )
             """)
@@ -781,7 +806,7 @@ def init_db(engine):
                     principal_amount REAL NOT NULL,
                     amount_paid REAL DEFAULT 0.0,
                     balance_due REAL NOT NULL,
-                    date_taken TEXT NOT NULL,
+                    date_taken TEXT,
                     notes TEXT
                 )
             """)
@@ -855,19 +880,90 @@ def calc_days_spent_and_left(start_str, finish_str):
   today = date.today()
   days_spent = 0
   days_left = 0
-  if start_str:
+  if start_str and str(start_str).strip() not in ("", "None", "nan"):
     try:
       d_start = datetime.strptime(str(start_str)[:10], "%Y-%m-%d").date()
       days_spent = max(0, (today - d_start).days)
     except ValueError:
       days_spent = 0
-  if finish_str:
+  if finish_str and str(finish_str).strip() not in ("", "None", "nan"):
     try:
       d_fin = datetime.strptime(str(finish_str)[:10], "%Y-%m-%d").date()
       days_left = (d_fin - today).days
     except ValueError:
       days_left = 0
   return days_spent, days_left
+
+
+def to_csv_bytes(df):
+  if df is None or df.empty:
+    return b""
+  return df.to_csv(index=False).encode("utf-8")
+
+
+def clean_str_val(val):
+  if val is None or (isinstance(val, float) and pd.isna(val)):
+    return ""
+  s = str(val).strip()
+  return "" if s in ("None", "nan", "NaT") else s
+
+
+def safe_float(val, default=0.0):
+  try:
+    if val is None or (isinstance(val, float) and pd.isna(val)) or str(val).strip() == "":
+      return default
+    return float(val)
+  except Exception:
+    return default
+
+
+def safe_int(val, default=0):
+  try:
+    if val is None or (isinstance(val, float) and pd.isna(val)) or str(val).strip() == "":
+      return default
+    return int(float(val))
+  except Exception:
+    return default
+
+
+def build_category_gender_summary(df_animals):
+  """Returns Male, Female, Other/Mixed, and Total counts for every animal category."""
+  rows = []
+  for cat in ANIMAL_CATEGORIES:
+    if not df_animals.empty and "animal_type" in df_animals.columns:
+      sub = df_animals[df_animals["animal_type"] == cat]
+    else:
+      sub = pd.DataFrame()
+    total_cnt = len(sub)
+    if not sub.empty:
+      g_series = sub["sex"].apply(classify_gender)
+      male_cnt = int((g_series == "Male").sum())
+      female_cnt = int((g_series == "Female").sum())
+      other_cnt = int((g_series == "Mixed / Young / Other").sum())
+      cost_sum = float(sub["cost"].fillna(0).sum())
+    else:
+      male_cnt = 0
+      female_cnt = 0
+      other_cnt = 0
+      cost_sum = 0.0
+    rows.append({
+        "Animal Type": cat,
+        "Female Count": female_cnt,
+        "Male Count": male_cnt,
+        "Mixed / Young / Other": other_cnt,
+        "Total Animals": total_cnt,
+        "Total Cost": cost_sum,
+    })
+  summary_df = pd.DataFrame(rows)
+  totals_row = pd.DataFrame([{
+      "Animal Type": "ALL LIVESTOCK TOTAL",
+      "Female Count": int(summary_df["Female Count"].sum()),
+      "Male Count": int(summary_df["Male Count"].sum()),
+      "Mixed / Young / Other": int(summary_df["Mixed / Young / Other"].sum()),
+      "Total Animals": int(summary_df["Total Animals"].sum()),
+      "Total Cost": float(summary_df["Total Cost"].sum()),
+  }])
+  return pd.concat([summary_df, totals_row], ignore_index=True)
 
 
 pg_engine, db_status_msg = get_pg_engine()
@@ -903,7 +999,6 @@ def request_navigation(target_page):
 
 def render_sign_in():
   inject_farm_theme(is_login_screen=True)
-
   st.markdown(
       """
       <div class="dp-login-banner">
@@ -913,17 +1008,14 @@ def render_sign_in():
       """,
       unsafe_allow_html=True,
   )
-
   preview_cols = st.columns(4)
   for idx, cat in enumerate(["Cattle", "Pigs / Swine", "Poultry (Broilers / Layers)", "Goats"]):
     with preview_cols[idx]:
       render_uniform_image(ANIMAL_IMAGES[cat], caption=cat, hero=False)
-
   st.markdown("")
   col_left, col_center, col_right = st.columns([1, 2, 1])
   with col_center:
     tab_admin, tab_staff = st.tabs(["🛡️ Admin Sign In", "👤 Staff Sign In"])
-
     with tab_admin:
       with st.form("admin_sign_in_form"):
         st.subheader("Administrator Sign In")
@@ -944,7 +1036,6 @@ def render_sign_in():
             st.error("This account does not have Administrator privileges.")
           else:
             st.error("Invalid admin username or password.")
-
     with tab_staff:
       with st.form("staff_sign_in_form"):
         st.subheader("Staff / Supervisor Sign In")
@@ -970,11 +1061,9 @@ if st.session_state.farm_user is None:
   st.stop()
 
 inject_farm_theme(is_login_screen=False)
-
 current_user = st.session_state.farm_user
 is_admin = current_user["role"] == "admin"
 allowed_pages = NAV_SECTIONS_ADMIN if is_admin else NAV_SECTIONS_BASE
-
 if st.session_state.active_page not in allowed_pages:
   st.session_state.active_page = allowed_pages[0]
 
@@ -982,7 +1071,7 @@ st.markdown(
     f"""
     <div class="dp-login-banner">
         <h1>🐄 D&amp;P FARMS — Management System</h1>
-        <p>Signed in as <strong>{current_user['full_name']}</strong> ({current_user['role'].upper()}) — Dynamic Species-Adaptive Entries, Visible Dates &amp; Hybrid Presets/Custom Typing.</p>
+        <p>Signed in as <strong>{current_user['full_name']}</strong> ({current_user['role'].upper()}) — Gender Counts, Editable Records, Optional Dates &amp; CSV Exports.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -998,6 +1087,14 @@ df_w_logs = read_df(pg_engine, "SELECT * FROM worker_finance_logs")
 df_farm_loans = read_df(pg_engine, "SELECT * FROM farm_loans")
 
 total_animals = len(df_animals)
+if not df_animals.empty:
+  _g_all = df_animals["sex"].apply(classify_gender)
+  total_females = int((_g_all == "Female").sum())
+  total_males = int((_g_all == "Male").sum())
+else:
+  total_females = 0
+  total_males = 0
+
 total_animal_cost = (
     float(df_animals["cost"].fillna(0).sum()) if not df_animals.empty else 0.0
 )
@@ -1044,12 +1141,14 @@ total_expenses = (
 )
 net_profit_or_loss = total_sales - total_expenses
 
-k1, k2, k3, k4, k5 = st.columns(5)
+k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
 k1.metric("Total Animals", total_animals)
-k2.metric("Inventory Value", f"{total_inventory_val:,.2f}")
-k3.metric("Total Sales", f"{total_sales:,.2f}")
-k4.metric("Total Expenses", f"{total_expenses:,.2f}")
-k5.metric(
+k2.metric("Female Animals", total_females)
+k3.metric("Male Animals", total_males)
+k4.metric("Inventory Value", f"{total_inventory_val:,.2f}")
+k5.metric("Total Sales", f"{total_sales:,.2f}")
+k6.metric("Total Expenses", f"{total_expenses:,.2f}")
+k7.metric(
     "Net Profit / (Loss)",
     f"{net_profit_or_loss:,.2f}",
     delta=f"{net_profit_or_loss:,.2f}",
@@ -1062,12 +1161,10 @@ if use_postgres(pg_engine):
   st.sidebar.success(f"🟢 {db_status_msg}")
 else:
   st.sidebar.info(f"🟡 {db_status_msg}")
-
 if st.sidebar.button("🚪 Sign Out"):
   st.session_state.farm_user = None
   st.rerun()
 
-# Use a distinct widget key so mutating active_page never triggers StreamlitWidgetAlreadyInstantiatedError
 sidebar_choice = st.sidebar.radio(
     "D&P FARMS Pages",
     allowed_pages,
@@ -1077,7 +1174,6 @@ sidebar_choice = st.sidebar.radio(
 if sidebar_choice != st.session_state.active_page:
   st.session_state.active_page = sidebar_choice
   st.rerun()
-
 nav = st.session_state.active_page
 
 
@@ -1108,25 +1204,29 @@ def get_rooms_for_animal_type(a_type):
 
 
 # ---------------------------------------------------------
-# 0. NEW PAGE: D&P FARMS OVERVIEW & QUICK ENTRY LAUNCHER
+# 0. FARM OVERVIEW & QUICK ENTRY LAUNCHER
 # ---------------------------------------------------------
 if nav == "🏡 Farm Overview & Gallery":
-  st.subheader("🏡 D&P FARMS — Livestock Gallery & Quick Entry Launcher")
+  st.subheader("🏡 D&P FARMS — Livestock Gallery, Gender Counts & Quick Entry Launcher")
   st.caption(
       "Click any animal below to jump straight to that animal's species-adapted "
-      "entry form, or review your live farm totals."
+      "entry form, or review live Female, Male, and Total counts per animal category."
   )
-
   g_cols = st.columns(4)
   for idx, cat in enumerate(ANIMAL_CATEGORIES):
     with g_cols[idx % 4]:
       render_uniform_image(ANIMAL_IMAGES[cat], caption=cat, hero=False)
-      count_in_cat = (
-          int((df_animals["animal_type"] == cat).sum())
-          if not df_animals.empty and "animal_type" in df_animals.columns
-          else 0
-      )
-      st.caption(f"Registered: **{count_in_cat}**")
+      if not df_animals.empty and "animal_type" in df_animals.columns:
+        sub_c = df_animals[df_animals["animal_type"] == cat]
+        count_in_cat = len(sub_c)
+        g_s = sub_c["sex"].apply(classify_gender) if not sub_c.empty else pd.Series(dtype=str)
+        f_cnt = int((g_s == "Female").sum()) if not sub_c.empty else 0
+        m_cnt = int((g_s == "Male").sum()) if not sub_c.empty else 0
+      else:
+        count_in_cat = 0
+        f_cnt = 0
+        m_cnt = 0
+      st.caption(f"Total: **{count_in_cat}** | ♀ Female: **{f_cnt}** | ♂ Male: **{m_cnt}**")
       if st.button(
           f"➕ Register {cat}",
           key=f"overview_jump_{idx}",
@@ -1137,53 +1237,51 @@ if nav == "🏡 Farm Overview & Gallery":
         request_navigation("🐾 Animals & Categories")
 
   st.markdown("---")
-  ov1, ov2 = st.columns(2)
+  ov1, ov2 = st.columns([1.3, 1])
   with ov1:
-    st.subheader("📊 Livestock Breakdown by Category")
-    if not df_animals.empty:
-      cat_tbl = (
-          df_animals.groupby("animal_type")
-          .agg(
-              Total_Registered=("id_number", "count"),
-              Total_Cost=("cost", "sum"),
-          )
-          .reset_index()
-      )
-      st.dataframe(cat_tbl, use_container_width=True, hide_index=True)
-    else:
-      st.info("No animals registered at D&P FARMS yet.")
-
+    st.subheader("📊 Female, Male & Total Counts by Animal Type")
+    gender_summary_df = build_category_gender_summary(df_animals)
+    st.dataframe(gender_summary_df, use_container_width=True, hide_index=True)
+    st.download_button(
+        "⬇️ Download All Animals Summary (CSV)",
+        data=to_csv_bytes(gender_summary_df),
+        file_name="dp_farms_gender_category_summary.csv",
+        mime="text/csv",
+        key="dl_ov_summary_csv",
+    )
   with ov2:
-    st.subheader("🥛 Recent Animal Product Output")
+    st.subheader("🥛 Recent Animal Product & Birth Output")
     if not df_products.empty:
+      display_cols = [
+          c for c in [
+              "animal_id",
+              "animal_type",
+              "product_category",
+              "offspring_sex",
+              "quantity",
+              "unit_label",
+              "record_date",
+          ]
+          if c in df_products.columns
+      ]
       st.dataframe(
-          df_products[
-              [
-                  "animal_id",
-                  "animal_type",
-                  "product_category",
-                  "quantity",
-                  "unit_label",
-                  "record_date",
-              ]
-          ].head(8),
+          df_products[display_cols].head(8),
           use_container_width=True,
           hide_index=True,
       )
     else:
       st.info("No animal product records logged yet.")
 
+
 # ---------------------------------------------------------
-# 1. ANIMALS REGISTERED + UNIFORM PICTURES + DYNAMIC ENTRIES ON SELECTION
+# 1. ANIMALS REGISTERED + GENDER COUNTS + EDITABLE + CSV DOWNLOAD
 # ---------------------------------------------------------
 elif nav == "🐾 Animals & Categories":
-  st.subheader("🐾 Select an Animal — All Entries Automatically Adapt to That Animal")
+  st.subheader("🐾 Select an Animal — Register, View Gender Counts, Edit & Download CSV")
   st.caption(
       "Click any animal picture or change the Animal Type selector below. "
-      "Housing labels, sex options, breeding/birth dates, and presets update immediately, "
-      "and every dropdown lets you pick a preset OR type your own custom value."
+      "Dates can be left empty if none is selected. Every entry below is editable and downloadable as CSV."
   )
-
   gallery_cols = st.columns(4)
   for idx, cat in enumerate(ANIMAL_CATEGORIES):
     with gallery_cols[idx % 4]:
@@ -1211,7 +1309,6 @@ elif nav == "🐾 Animals & Categories":
     if chosen_cat != st.session_state.selected_animal_type:
       st.session_state.selected_animal_type = chosen_cat
       st.rerun()
-
     active_cat = st.session_state.selected_animal_type
     prof = get_profile(active_cat)
     render_uniform_image(
@@ -1220,14 +1317,33 @@ elif nav == "🐾 Animals & Categories":
         hero=True,
     )
 
+    # Individual Category Gender Breakdown Card
+    sub_active = (
+        df_animals[df_animals["animal_type"] == active_cat]
+        if not df_animals.empty
+        else pd.DataFrame()
+    )
+    act_total = len(sub_active)
+    if not sub_active.empty:
+      _g_sub = sub_active["sex"].apply(classify_gender)
+      act_female = int((_g_sub == "Female").sum())
+      act_male = int((_g_sub == "Male").sum())
+    else:
+      act_female = 0
+      act_male = 0
+    st.markdown(f"#### 📊 {active_cat} Counts")
+    gc1, gc2, gc3 = st.columns(3)
+    gc1.metric("♀ Female", act_female)
+    gc2.metric("♂ Male", act_male)
+    gc3.metric("Total", act_total)
+
   with sel_col2:
     st.markdown(f"### ✍️ Direct Entry Point — {active_cat}")
     st.info(
         f"Fields adapted for **{active_cat}**: `{prof['housing_label']}`, "
         f"`{prof['repro_event_label']}`, and `{prof['birth_event_label']}`. "
-        f"Use the preset dropdowns or type any custom text."
+        f"Dates default to empty unless you pick one."
     )
-
     with st.form(f"register_animal_form_{active_cat}", clear_on_submit=True):
       room_number = editable_text_dropdown(
           prof["housing_label"],
@@ -1236,47 +1352,43 @@ elif nav == "🐾 Animals & Categories":
           placeholder=f"e.g., {prof['housing_presets'][0]}",
       )
       sex = editable_text_dropdown(
-          "Sex / Flock Class",
+          "Sex / Gender (Male / Female / Class)",
           prof["sex_options"],
           key_prefix=f"anim_sex_{active_cat}",
-          placeholder="Or type custom sex/class...",
+          placeholder="Select or type Male / Female...",
       )
-
       c3, c4 = st.columns(2)
       id_number = c3.text_input(
           f"{active_cat} ID / Tag Number (optional)",
           placeholder=f"e.g., {prof['id_prefix']}-101",
       ).strip()
       cost = c4.number_input("Purchase / Acquisition Cost", min_value=0.0, step=10.0)
-
       c5, c6, c7, c8 = st.columns(4)
       with c5:
         date_brought = date_input_with_display(
-            "Date Brought", f"dt_brought_{active_cat}", date.today()
+            "Date Brought (Optional)", f"dt_brought_{active_cat}", None
         )
       with c6:
         date_of_birth = date_input_with_display(
-            "Date of Birth / Hatch", f"dt_dob_{active_cat}", date.today()
+            "Date of Birth / Hatch (Optional)", f"dt_dob_{active_cat}", None
         )
       with c7:
         crossing_date = date_input_with_display(
-            prof["repro_event_label"], f"dt_cross_{active_cat}", date.today()
+            f"{prof['repro_event_label']} (Optional)", f"dt_cross_{active_cat}", None
         )
       with c8:
         farrow_date = date_input_with_display(
-            prof["birth_event_label"], f"dt_farrow_{active_cat}", date.today()
+            f"{prof['birth_event_label']} (Optional)", f"dt_farrow_{active_cat}", None
         )
-
       c9, c10 = st.columns(2)
       with c9:
         plan_buy_date = date_input_with_display(
-            "Planning to Buy Time", f"dt_pbuy_{active_cat}", date.today()
+            "Planning to Buy Time (Optional)", f"dt_pbuy_{active_cat}", None
         )
       with c10:
         plan_sell_date = date_input_with_display(
-            "Planning to Sell Time", f"dt_psell_{active_cat}", date.today()
+            "Planning to Sell Time (Optional)", f"dt_psell_{active_cat}", None
         )
-
       if st.form_submit_button(f"Save {active_cat} Record", type="primary"):
         final_id = (
             id_number
@@ -1289,63 +1401,191 @@ elif nav == "🐾 Animals & Categories":
           exec_sql(
               pg_engine,
               """
-                          INSERT INTO animals (
-                              id_number, animal_type, room_number, date_brought,
-                              sex, cost, date_of_birth, crossing_date, farrow_date,
-                              plan_buy_date, plan_sell_date
-                          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                          """,
+              INSERT INTO animals (
+                  id_number, animal_type, room_number, date_brought,
+                  sex, cost, date_of_birth, crossing_date, farrow_date,
+                  plan_buy_date, plan_sell_date
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              """,
               (
                   final_id,
                   active_cat,
                   final_room,
-                  str(date_brought),
+                  date_brought,
                   final_sex,
                   float(cost),
-                  str(date_of_birth),
-                  str(crossing_date),
-                  str(farrow_date),
-                  str(plan_buy_date),
-                  str(plan_sell_date),
+                  date_of_birth,
+                  crossing_date,
+                  farrow_date,
+                  plan_buy_date,
+                  plan_sell_date,
               ),
           )
           st.success(
-              f"Registered {active_cat} with ID `{final_id}` in `{final_room}`."
+              f"Registered {active_cat} with ID `{final_id}` ({final_sex}) in `{final_room}`."
           )
           st.rerun()
         except Exception as exc:
           st.error(f"Could not save animal record: {exc}")
 
   st.markdown("---")
-  st.subheader("📊 Totals by Animal Category")
+  st.subheader("📊 Gender & Total Counts by Animal Category")
   df_animals = read_df(pg_engine, "SELECT * FROM animals")
-  if not df_animals.empty:
-    cat_summary = (
-        df_animals.groupby("animal_type")
-        .agg(
-            Total_Animals=("id_number", "count"),
-            Total_Animal_Cost=("cost", "sum"),
-        )
-        .reset_index()
-    )
-    st.dataframe(cat_summary, use_container_width=True, hide_index=True)
+  gender_tbl = build_category_gender_summary(df_animals)
+  st.dataframe(gender_tbl, use_container_width=True, hide_index=True)
 
-    st.subheader("📋 Registered Animals Directory")
-    st.dataframe(df_animals, use_container_width=True, hide_index=True)
+  if not df_animals.empty:
+    df_animals_enriched = df_animals.copy()
+    df_animals_enriched["gender_group"] = df_animals_enriched["sex"].apply(classify_gender)
+
+    st.markdown("---")
+    st.subheader(f"🐾 Individual Animal Records ({active_cat}) & CSV Download")
+    df_active_records = df_animals_enriched[
+        df_animals_enriched["animal_type"] == active_cat
+    ].copy()
+
+    dl1, dl2 = st.columns(2)
+    with dl1:
+      if not df_active_records.empty:
+        st.download_button(
+            f"⬇️ Download {active_cat} Records (CSV)",
+            data=to_csv_bytes(df_active_records),
+            file_name=f"dp_farms_{active_cat.lower().replace(' ', '_').replace('/', '_')}_records.csv",
+            mime="text/csv",
+            key="dl_individual_animal_csv",
+        )
+    with dl2:
+      st.download_button(
+          "⬇️ Download ALL Animal Records (CSV)",
+          data=to_csv_bytes(df_animals_enriched),
+          file_name="dp_farms_all_animal_records.csv",
+          mime="text/csv",
+          key="dl_all_animals_csv",
+      )
+
+    if not df_active_records.empty:
+      st.dataframe(df_active_records, use_container_width=True, hide_index=True)
+    else:
+      st.info(f"No individual records for {active_cat} yet.")
+
+    st.subheader("📋 All Registered Animals Directory (All Categories)")
+    st.dataframe(df_animals_enriched, use_container_width=True, hide_index=True)
+
+    # EDITABLE ANIMAL ENTRIES
+    st.markdown("---")
+    st.subheader("✏️ Edit Any Registered Animal Record")
+    animal_ids_all = df_animals["id_number"].tolist()
+    edit_aid = st.selectbox(
+        "Select Animal ID to Edit",
+        animal_ids_all,
+        key="select_edit_animal_id",
+    )
+    row_to_edit = df_animals[df_animals["id_number"] == edit_aid].iloc[0]
+    with st.form("edit_animal_record_form"):
+      ec1, ec2, ec3 = st.columns(3)
+      new_atype = ec1.selectbox(
+          "Animal Category",
+          ANIMAL_CATEGORIES,
+          index=ANIMAL_CATEGORIES.index(row_to_edit["animal_type"])
+          if row_to_edit["animal_type"] in ANIMAL_CATEGORIES
+          else 0,
+      )
+      new_room = ec2.text_input(
+          "Housing / Pen / Room", value=clean_str_val(row_to_edit["room_number"])
+      ).strip()
+      new_sex = ec3.text_input(
+          "Sex / Gender (Male / Female / Class)", value=clean_str_val(row_to_edit["sex"])
+      ).strip()
+
+      ec4, ec5, ec6 = st.columns(3)
+      new_cost = ec4.number_input(
+          "Acquisition Cost",
+          min_value=0.0,
+          value=safe_float(row_to_edit["cost"], 0.0),
+          step=10.0,
+      )
+      status_opts = ["Active", "Sold", "Deceased", "Transferred", "Quarantine"]
+      cur_status = clean_str_val(row_to_edit.get("status", "Active")) or "Active"
+      if cur_status not in status_opts:
+        status_opts.append(cur_status)
+      new_status = ec5.selectbox(
+          "Status", status_opts, index=status_opts.index(cur_status)
+      )
+      new_dbrought = ec6.text_input(
+          "Date Brought (YYYY-MM-DD or empty)",
+          value=clean_str_val(row_to_edit["date_brought"]),
+      ).strip()
+
+      ec7, ec8, ec9, ec10, ec11 = st.columns(5)
+      new_dob = ec7.text_input(
+          "Date of Birth (YYYY-MM-DD or empty)",
+          value=clean_str_val(row_to_edit["date_of_birth"]),
+      ).strip()
+      new_cross = ec8.text_input(
+          "Crossing Date (YYYY-MM-DD or empty)",
+          value=clean_str_val(row_to_edit["crossing_date"]),
+      ).strip()
+      new_farrow = ec9.text_input(
+          "Birth/Farrow Date (YYYY-MM-DD or empty)",
+          value=clean_str_val(row_to_edit["farrow_date"]),
+      ).strip()
+      new_pbuy = ec10.text_input(
+          "Plan Buy Date (YYYY-MM-DD or empty)",
+          value=clean_str_val(row_to_edit["plan_buy_date"]),
+      ).strip()
+      new_psell = ec11.text_input(
+          "Plan Sell Date (YYYY-MM-DD or empty)",
+          value=clean_str_val(row_to_edit["plan_sell_date"]),
+      ).strip()
+
+      b_upd, b_del = st.columns(2)
+      save_edit_btn = b_upd.form_submit_button("💾 Update Animal Record", type="primary")
+      del_edit_btn = b_del.form_submit_button("🗑️ Delete This Animal Record")
+
+      if save_edit_btn:
+        exec_sql(
+            pg_engine,
+            """
+            UPDATE animals SET
+                animal_type = ?, room_number = ?, date_brought = ?, sex = ?,
+                cost = ?, date_of_birth = ?, crossing_date = ?, farrow_date = ?,
+                status = ?, plan_buy_date = ?, plan_sell_date = ?
+            WHERE id_number = ?
+            """,
+            (
+                new_atype,
+                new_room or "Unassigned",
+                new_dbrought,
+                new_sex or "Unspecified",
+                float(new_cost),
+                new_dob,
+                new_cross,
+                new_farrow,
+                new_status,
+                new_pbuy,
+                new_psell,
+                edit_aid,
+            ),
+        )
+        st.success(f"Updated record for Animal ID `{edit_aid}`.")
+        st.rerun()
+      if del_edit_btn:
+        exec_sql(pg_engine, "DELETE FROM animals WHERE id_number = ?", (edit_aid,))
+        st.warning(f"Deleted Animal ID `{edit_aid}`.")
+        st.rerun()
   else:
     st.info("No animals registered yet.")
 
+
 # ---------------------------------------------------------
-# 2. ANIMAL PRODUCTS & PERFORMANCE BY ANIMAL ID (DYNAMIC BY ANIMAL)
+# 2. ANIMAL PRODUCTS & PERFORMANCE (BIRTH MALE/FEMALE + EDITABLE + CSV)
 # ---------------------------------------------------------
 elif nav == "🥛 Animal Products & Performance":
-  st.subheader("🥛 Animal Products Total & Performance by Animal ID")
+  st.subheader("🥛 Animal Products Total, Offspring Birth (Male/Female) & Performance")
   st.caption(
-      "Select an Animal Type below—all product categories, units, room presets, "
-      "and registered Animal IDs automatically switch to match that animal. "
-      "Every dropdown supports both presets and custom typing."
+      "Select an Animal Type below—product categories, units, room presets, "
+      "and registered Animal IDs automatically switch. When recording births, choose Male or Female."
   )
-
   p_top1, p_top2 = st.columns([1, 2])
   with p_top1:
     prod_animal_type = st.selectbox(
@@ -1363,7 +1603,6 @@ elif nav == "🥛 Animal Products & Performance":
         caption=f"Products for: {prod_animal_type}",
         hero=False,
     )
-
   with p_top2:
     registered_ids = get_ids_for_animal_type(prod_animal_type)
     with st.form(f"animal_products_form_{prod_animal_type}", clear_on_submit=True):
@@ -1381,10 +1620,15 @@ elif nav == "🥛 Animal Products & Performance":
           placeholder=f"e.g., {prof['housing_presets'][0]}",
       )
       prod_category = editable_text_dropdown(
-          f"{prod_animal_type} Product / Output Type",
+          f"{prod_animal_type} Product / Birth / Output Type",
           prof["product_categories"],
           key_prefix=f"prod_cat_{prod_animal_type}",
-          placeholder="Or type custom product type...",
+          placeholder="Or type custom product/birth type...",
+      )
+      offspring_sex = st.selectbox(
+          "Birth / Offspring Gender (Choose Male or Female for Birth Recording)",
+          ["Not Applicable (Non-Birth Product)", "Female", "Male", "Mixed (Both Male & Female)"],
+          key=f"prod_offspring_sex_{prod_animal_type}",
       )
       prod_detail = editable_text_dropdown(
           "Product / Birth Details",
@@ -1399,27 +1643,24 @@ elif nav == "🥛 Animal Products & Performance":
           key_prefix=f"prod_unit_{prod_animal_type}",
           placeholder="e.g., Litres, Crates, Chicks, Kids...",
       )
-
       prod_qty = quantity_selector(
-          "Product Quantity / Volume / Count",
+          "Product Quantity / Volume / Birth Count",
           f"prod_qty_{prod_animal_type}",
           default_preset=1,
           min_val=0.0,
           step=1.0,
       )
-
       c8, c9 = st.columns(2)
       with c8:
         prod_date = date_input_with_display(
-            "Date Recorded", f"dt_prod_{prod_animal_type}", date.today()
+            "Date Recorded (Optional)", f"dt_prod_{prod_animal_type}", None
         )
       prod_notes = c9.text_input(
           "Performance / Health Notes (optional)",
-          placeholder="e.g., Strong yield / low output / needs checkup",
+          placeholder="e.g., Strong yield / healthy male & female offspring",
       ).strip()
-
       if st.form_submit_button(
-          f"Save {prod_animal_type} Product Record", type="primary"
+          f"Save {prod_animal_type} Product / Birth Record", type="primary"
       ):
         aid_to_save = (
             final_animal_id
@@ -1428,37 +1669,39 @@ elif nav == "🥛 Animal Products & Performance":
         )
         cat_to_save = prod_category or prof["product_categories"][0]
         unit_to_save = unit_label or prof["product_units"][0]
-
         exec_sql(
             pg_engine,
             """
-                  INSERT INTO animal_products (
-                      animal_id, animal_type, room_number, product_category,
-                      product_detail, quantity, unit_label, record_date, notes
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                  """,
+            INSERT INTO animal_products (
+                animal_id, animal_type, room_number, product_category,
+                product_detail, offspring_sex, quantity, unit_label, record_date, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
             (
                 aid_to_save,
                 prod_animal_type,
                 prod_room or prof["housing_presets"][0],
                 cat_to_save,
                 prod_detail or cat_to_save,
+                offspring_sex,
                 float(prod_qty),
                 unit_to_save,
-                str(prod_date),
+                prod_date,
                 prod_notes,
             ),
         )
         st.success(
-            f"Recorded {prod_qty:g} {unit_to_save} ({cat_to_save}) for `{aid_to_save}`."
+            f"Recorded {prod_qty:g} {unit_to_save} ({cat_to_save} — {offspring_sex}) for `{aid_to_save}`."
         )
         st.rerun()
 
   df_prod_all = read_df(pg_engine, "SELECT * FROM animal_products ORDER BY id DESC")
-
   st.markdown("---")
-  st.subheader("📦 D&P FARMS Product Totals")
+  st.subheader("📦 D&P FARMS Product & Birth Totals")
   if not df_prod_all.empty:
+    if "offspring_sex" not in df_prod_all.columns:
+      df_prod_all["offspring_sex"] = "Unspecified"
+
     milk_tot = float(
         df_prod_all[
             df_prod_all["product_category"].str.contains("Milk", case=False, na=False)
@@ -1480,23 +1723,28 @@ elif nav == "🥛 Animal Products & Performance":
         .fillna(0)
         .sum()
     )
-    births_tot = float(
-        df_prod_all[
-            df_prod_all["product_category"].str.contains("Birth", case=False, na=False)
-        ]["quantity"]
-        .fillna(0)
-        .sum()
+    births_mask = df_prod_all["product_category"].str.contains(
+        "Birth|Chicks Birth", case=False, na=False
+    )
+    births_df = df_prod_all[births_mask]
+    births_tot = float(births_df["quantity"].fillna(0).sum())
+    female_births_tot = float(
+        births_df[births_df["offspring_sex"] == "Female"]["quantity"].fillna(0).sum()
+    )
+    male_births_tot = float(
+        births_df[births_df["offspring_sex"] == "Male"]["quantity"].fillna(0).sum()
     )
 
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
     m1.metric("Total Milk Volume", f"{milk_tot:,.2f}")
     m2.metric("Total Eggs Laid", f"{eggs_tot:,.0f}")
-    m3.metric("Total Chicks (All / Born)", f"{chicks_tot:,.0f}")
-    m4.metric("Total Births / Offspring", f"{births_tot:,.0f}")
+    m3.metric("Total Chicks", f"{chicks_tot:,.0f}")
+    m4.metric("Total Births", f"{births_tot:,.0f}")
+    m5.metric("♀ Female Births", f"{female_births_tot:,.0f}")
+    m6.metric("♂ Male Births", f"{male_births_tot:,.0f}")
 
     st.markdown("---")
     st.subheader("🏆 Performance by Animal ID (Who Is Doing Well vs. Not)")
-
     perf_rows = []
     for aid, grp in df_prod_all.groupby("animal_id"):
       a_types = ", ".join(sorted(grp["animal_type"].dropna().unique().tolist()))
@@ -1515,15 +1763,13 @@ elif nav == "🥛 Animal Products & Performance":
           .fillna(0)
           .sum()
       )
-      births_v = float(
-          grp[grp["product_category"].str.contains("Birth", case=False, na=False)]["quantity"]
-          .fillna(0)
-          .sum()
-      )
+      b_grp = grp[grp["product_category"].str.contains("Birth", case=False, na=False)]
+      births_v = float(b_grp["quantity"].fillna(0).sum())
+      f_birth_v = float(b_grp[b_grp["offspring_sex"] == "Female"]["quantity"].fillna(0).sum())
+      m_birth_v = float(b_grp[b_grp["offspring_sex"] == "Male"]["quantity"].fillna(0).sum())
       total_out = float(grp["quantity"].fillna(0).sum())
       other_v = max(0.0, total_out - (milk_v + eggs_v + chicks_v + births_v))
       entries_cnt = len(grp)
-
       mort_linked = 0
       if not df_feed.empty and "id_number" in df_feed.columns:
         m_sub = df_feed[
@@ -1534,65 +1780,163 @@ elif nav == "🥛 Animal Products & Performance":
               m_sub["mortality_count"].fillna(0).sum()
               + m_sub["death_count"].fillna(0).sum()
           )
-
       if total_out > 0 and mort_linked == 0:
         status_badge = "🟢 Doing Well"
       elif total_out > 0 and mort_linked > 0:
         status_badge = "🟡 Moderate (Watch Losses)"
       else:
         status_badge = "🔴 Low / No Output Yet"
-
       perf_rows.append({
           "Animal ID": aid,
           "Animal Type": a_types,
           "Milk Volume": milk_v,
           "Eggs Laid": eggs_v,
-          "Chicks (Total / Born)": chicks_v,
-          "Birth Given": births_v,
+          "Chicks": chicks_v,
+          "Female Births": f_birth_v,
+          "Male Births": m_birth_v,
+          "Total Birth Given": births_v,
           "Other Output": other_v,
           "Total Output Units": total_out,
           "Linked Losses": mort_linked,
           "Records": entries_cnt,
           "Performance Status": status_badge,
       })
-
     df_perf = pd.DataFrame(perf_rows).sort_values(
         by="Total Output Units", ascending=False
     )
     st.dataframe(df_perf, use_container_width=True, hide_index=True)
 
-    st.subheader("🔎 Inspect a Specific Animal ID's Product History")
+    st.subheader("🔎 Inspect Individual Animal ID Product Logs & Download CSV")
     selected_inspect_id = st.selectbox(
         "Filter Product Logs by Animal ID",
         ["All Animal IDs"] + df_perf["Animal ID"].tolist(),
+        key="inspect_prod_animal_id",
     )
     if selected_inspect_id != "All Animal IDs":
-      st.dataframe(
-          df_prod_all[df_prod_all["animal_id"] == selected_inspect_id],
-          use_container_width=True,
-          hide_index=True,
+      df_filtered_prod = df_prod_all[df_prod_all["animal_id"] == selected_inspect_id]
+      st.dataframe(df_filtered_prod, use_container_width=True, hide_index=True)
+      st.download_button(
+          f"⬇️ Download {selected_inspect_id} Product Records (CSV)",
+          data=to_csv_bytes(df_filtered_prod),
+          file_name=f"dp_farms_{selected_inspect_id}_products.csv",
+          mime="text/csv",
+          key="dl_ind_prod_csv",
       )
     else:
       st.dataframe(df_prod_all, use_container_width=True, hide_index=True)
+
+    st.download_button(
+        "⬇️ Download ALL Product & Birth Records (CSV)",
+        data=to_csv_bytes(df_prod_all),
+        file_name="dp_farms_all_product_records.csv",
+        mime="text/csv",
+        key="dl_all_prod_csv",
+    )
+
+    # EDITABLE PRODUCT/BIRTH ENTRIES
+    st.markdown("---")
+    st.subheader("✏️ Edit Any Product / Birth Record")
+    prod_row_ids = df_prod_all["id"].tolist()
+    edit_pid = st.selectbox(
+        "Select Product / Birth Entry ID to Edit",
+        prod_row_ids,
+        format_func=lambda x: (
+            f"ID #{x} — {df_prod_all[df_prod_all['id']==x].iloc[0]['animal_id']} "
+            f"({df_prod_all[df_prod_all['id']==x].iloc[0]['product_category']})"
+        ),
+        key="select_edit_prod_id",
+    )
+    p_row = df_prod_all[df_prod_all["id"] == edit_pid].iloc[0]
+    with st.form("edit_product_record_form"):
+      pe1, pe2, pe3 = st.columns(3)
+      ep_aid = pe1.text_input("Animal ID", value=clean_str_val(p_row["animal_id"])).strip()
+      ep_atype = pe2.selectbox(
+          "Animal Type",
+          ANIMAL_CATEGORIES,
+          index=ANIMAL_CATEGORIES.index(p_row["animal_type"])
+          if p_row["animal_type"] in ANIMAL_CATEGORIES
+          else 0,
+      )
+      ep_room = pe3.text_input("Room / Housing", value=clean_str_val(p_row["room_number"])).strip()
+
+      pe4, pe5, pe6 = st.columns(3)
+      ep_cat = pe4.text_input("Product / Birth Category", value=clean_str_val(p_row["product_category"])).strip()
+      sex_choices = [
+          "Not Applicable (Non-Birth Product)",
+          "Female",
+          "Male",
+          "Mixed (Both Male & Female)",
+          "Unspecified",
+      ]
+      cur_osex = clean_str_val(p_row.get("offspring_sex", "Unspecified")) or "Unspecified"
+      if cur_osex not in sex_choices:
+        sex_choices.append(cur_osex)
+      ep_osex = pe5.selectbox(
+          "Birth / Offspring Gender (Male / Female)",
+          sex_choices,
+          index=sex_choices.index(cur_osex),
+      )
+      ep_det = pe6.text_input("Product / Birth Detail", value=clean_str_val(p_row["product_detail"])).strip()
+
+      pe7, pe8, pe9, pe10 = st.columns(4)
+      ep_qty = pe7.number_input(
+          "Quantity / Count", min_value=0.0, value=safe_float(p_row["quantity"], 0.0), step=1.0
+      )
+      ep_unit = pe8.text_input("Unit Label", value=clean_str_val(p_row["unit_label"])).strip()
+      ep_date = pe9.text_input(
+          "Record Date (YYYY-MM-DD or empty)", value=clean_str_val(p_row["record_date"])
+      ).strip()
+      ep_notes = pe10.text_input("Notes", value=clean_str_val(p_row["notes"])).strip()
+
+      pb1, pb2 = st.columns(2)
+      if pb1.form_submit_button("💾 Update Product / Birth Record", type="primary"):
+        exec_sql(
+            pg_engine,
+            """
+            UPDATE animal_products SET
+                animal_id = ?, animal_type = ?, room_number = ?, product_category = ?,
+                product_detail = ?, offspring_sex = ?, quantity = ?, unit_label = ?,
+                record_date = ?, notes = ?
+            WHERE id = ?
+            """,
+            (
+                ep_aid or "General",
+                ep_atype,
+                ep_room,
+                ep_cat,
+                ep_det,
+                ep_osex,
+                float(ep_qty),
+                ep_unit,
+                ep_date,
+                ep_notes,
+                int(edit_pid),
+            ),
+        )
+        st.success(f"Updated Product / Birth Record #{edit_pid}.")
+        st.rerun()
+      if pb2.form_submit_button("🗑️ Delete Product / Birth Record"):
+        exec_sql(pg_engine, "DELETE FROM animal_products WHERE id = ?", (int(edit_pid),))
+        st.warning(f"Deleted Product / Birth Record #{edit_pid}.")
+        st.rerun()
   else:
     st.info(
         "No animal product records yet. Select an animal above and log milk, "
         "eggs, chicks, or birth records."
     )
 
+
 # ---------------------------------------------------------
-# 3. FEED, MORTALITY, DEATH & DAYS (DYNAMIC BY SELECTED ANIMAL)
+# 3. FEED, MORTALITY, DEATH & DAYS (EDITABLE + OPTIONAL DATES + CSV)
 # ---------------------------------------------------------
 elif nav == "🌾 Feed, Mortality, Death & Days":
   st.subheader(
       "🌾 Feed / Food, Separate Mortality & Death, Days Spent & Days Left"
   )
   st.caption(
-      "Choose an Animal Type below—housing labels, feed types, food supplements, "
-      "'of what?' descriptions, and mortality/death categories automatically adapt. "
-      "Every dropdown allows picking a preset OR typing a custom entry."
+      "Choose an Animal Type below. Dates default to empty if none is selected. "
+      "All entries can be edited or downloaded as CSV below."
   )
-
   f_top1, f_top2 = st.columns([1, 2.2])
   with f_top1:
     a_type = st.selectbox(
@@ -1610,7 +1954,6 @@ elif nav == "🌾 Feed, Mortality, Death & Days":
         caption=f"Feed & Losses: {a_type}",
         hero=False,
     )
-
   with f_top2:
     with st.form(f"feed_mortality_form_{a_type}", clear_on_submit=True):
       room_no = editable_text_dropdown(
@@ -1645,11 +1988,9 @@ elif nav == "🌾 Feed, Mortality, Death & Days":
           key_prefix=f"food_of_what_{a_type}",
           placeholder="e.g., 50kg bags, hay bales, buckets...",
       )
-
       other_exp = st.number_input(
           "Other Expenses (optional)", min_value=0.0, step=1.0
       )
-
       st.markdown("**Quantity & Unit Cost (Quick Select or Type Exact)**")
       qty = quantity_selector(
           "Quantity", f"feed_qty_{a_type}", default_preset=10, min_val=0.0, step=1.0
@@ -1661,14 +2002,13 @@ elif nav == "🌾 Feed, Mortality, Death & Days":
           min_val=0.0,
           step=1.0,
       )
-
       st.markdown("---")
       st.markdown(f"**Separate Mortality & Death Tracking ({a_type})**")
       mort_cnt = int(
           quantity_selector(
               "Mortality Count",
               f"mort_cnt_{a_type}",
-              default_preset=1,
+              default_preset=0,
               min_val=0.0,
               step=1.0,
           )
@@ -1681,14 +2021,13 @@ elif nav == "🌾 Feed, Mortality, Death & Days":
           default_blank=True,
       )
       mort_date = date_input_with_display(
-          "Date of Mortality", f"dt_mort_{a_type}", date.today()
+          "Date of Mortality (Optional)", f"dt_mort_{a_type}", None
       )
-
       death_cnt = int(
           quantity_selector(
               "Death Count",
               f"death_cnt_{a_type}",
-              default_preset=1,
+              default_preset=0,
               min_val=0.0,
               step=1.0,
           )
@@ -1701,20 +2040,18 @@ elif nav == "🌾 Feed, Mortality, Death & Days":
           default_blank=True,
       )
       death_date = date_input_with_display(
-          "Date of Death", f"dt_death_{a_type}", date.today()
+          "Date of Death (Optional)", f"dt_death_{a_type}", None
       )
-
       st.markdown("---")
       c9, c10 = st.columns(2)
       with c9:
         date_rec = date_input_with_display(
-            "Date Recorded / Brought", f"dt_frec_{a_type}", date.today()
+            "Date Recorded / Brought (Optional)", f"dt_frec_{a_type}", None
         )
       with c10:
         date_fin = date_input_with_display(
-            "Date Finish (Expected)", f"dt_ffin_{a_type}", date.today()
+            "Date Finish (Expected, Optional)", f"dt_ffin_{a_type}", None
         )
-
       if st.form_submit_button(
           f"Save {a_type} Feed, Mortality & Death Record", type="primary"
       ):
@@ -1722,14 +2059,14 @@ elif nav == "🌾 Feed, Mortality, Death & Days":
         exec_sql(
             pg_engine,
             """
-                  INSERT INTO feed_and_mortality (
-                      animal_type, room_number, id_number, feed_type, food_type,
-                      food_quantity_of_what, quantity, unit_cost, total_cost,
-                      date_recorded, date_finish, mortality_count, mortality_of_what,
-                      death_count, death_of_what, date_of_mortality, date_of_death,
-                      other_expenses
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                  """,
+            INSERT INTO feed_and_mortality (
+                animal_type, room_number, id_number, feed_type, food_type,
+                food_quantity_of_what, quantity, unit_cost, total_cost,
+                date_recorded, date_finish, mortality_count, mortality_of_what,
+                death_count, death_of_what, date_of_mortality, date_of_death,
+                other_expenses
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
             (
                 a_type,
                 room_no or prof["housing_presets"][0],
@@ -1740,14 +2077,14 @@ elif nav == "🌾 Feed, Mortality, Death & Days":
                 float(qty),
                 float(unit_cost),
                 computed_total,
-                str(date_rec),
-                str(date_fin),
+                date_rec,
+                date_fin,
                 int(mort_cnt),
                 mort_of_what,
                 int(death_cnt),
                 death_of_what,
-                str(mort_date),
-                str(death_date),
+                mort_date,
+                death_date,
                 float(other_exp),
             ),
         )
@@ -1765,19 +2102,142 @@ elif nav == "🌾 Feed, Mortality, Death & Days":
     df_feed["days_spent"] = days_spent_list
     df_feed["days_left"] = days_left_list
     st.dataframe(df_feed, use_container_width=True, hide_index=True)
+
+    st.download_button(
+        "⬇️ Download Feed, Mortality & Death Records (CSV)",
+        data=to_csv_bytes(df_feed),
+        file_name="dp_farms_feed_mortality_records.csv",
+        mime="text/csv",
+        key="dl_feed_csv",
+    )
+
+    # EDITABLE FEED & MORTALITY ENTRIES
+    st.markdown("---")
+    st.subheader("✏️ Edit Any Feed, Mortality & Death Record")
+    edit_fid = st.selectbox(
+        "Select Feed / Mortality Entry ID to Edit",
+        df_feed["id"].tolist(),
+        format_func=lambda x: (
+            f"ID #{x} — {df_feed[df_feed['id']==x].iloc[0]['animal_type']} | "
+            f"{df_feed[df_feed['id']==x].iloc[0]['feed_type']}"
+        ),
+        key="select_edit_feed_id",
+    )
+    f_row = df_feed[df_feed["id"] == edit_fid].iloc[0]
+    with st.form("edit_feed_record_form"):
+      fe1, fe2, fe3 = st.columns(3)
+      ef_atype = fe1.selectbox(
+          "Animal Type",
+          ANIMAL_CATEGORIES,
+          index=ANIMAL_CATEGORIES.index(f_row["animal_type"])
+          if f_row["animal_type"] in ANIMAL_CATEGORIES
+          else 0,
+      )
+      ef_room = fe2.text_input("Room / Housing", value=clean_str_val(f_row["room_number"])).strip()
+      ef_aid = fe3.text_input("Animal ID / Batch", value=clean_str_val(f_row["id_number"])).strip()
+
+      fe4, fe5, fe6 = st.columns(3)
+      ef_feed = fe4.text_input("Feed Type", value=clean_str_val(f_row["feed_type"])).strip()
+      ef_food = fe5.text_input("Food / Supplement", value=clean_str_val(f_row["food_type"])).strip()
+      ef_ofwhat = fe6.text_input(
+          "Food Quantity — of what?", value=clean_str_val(f_row["food_quantity_of_what"])
+      ).strip()
+
+      fe7, fe8, fe9 = st.columns(3)
+      ef_qty = fe7.number_input("Quantity", min_value=0.0, value=safe_float(f_row["quantity"], 0.0), step=1.0)
+      ef_ucost = fe8.number_input(
+          "Unit Cost", min_value=0.0, value=safe_float(f_row["unit_cost"], 0.0), step=1.0
+      )
+      ef_oexp = fe9.number_input(
+          "Other Expenses", min_value=0.0, value=safe_float(f_row["other_expenses"], 0.0), step=1.0
+      )
+
+      fe10, fe11, fe12 = st.columns(3)
+      ef_mcnt = fe10.number_input(
+          "Mortality Count", min_value=0, value=safe_int(f_row["mortality_count"], 0), step=1
+      )
+      ef_mwhat = fe11.text_input(
+          "Mortality — of what?", value=clean_str_val(f_row["mortality_of_what"])
+      ).strip()
+      ef_mdate = fe12.text_input(
+          "Date of Mortality (YYYY-MM-DD or empty)",
+          value=clean_str_val(f_row["date_of_mortality"]),
+      ).strip()
+
+      fe13, fe14, fe15 = st.columns(3)
+      ef_dcnt = fe13.number_input(
+          "Death Count", min_value=0, value=safe_int(f_row["death_count"], 0), step=1
+      )
+      ef_dwhat = fe14.text_input(
+          "Death — of what?", value=clean_str_val(f_row["death_of_what"])
+      ).strip()
+      ef_ddate = fe15.text_input(
+          "Date of Death (YYYY-MM-DD or empty)", value=clean_str_val(f_row["date_of_death"])
+      ).strip()
+
+      fe16, fe17 = st.columns(2)
+      ef_drec = fe16.text_input(
+          "Date Recorded (YYYY-MM-DD or empty)", value=clean_str_val(f_row["date_recorded"])
+      ).strip()
+      ef_dfin = fe17.text_input(
+          "Date Finish (YYYY-MM-DD or empty)", value=clean_str_val(f_row["date_finish"])
+      ).strip()
+
+      fb1, fb2 = st.columns(2)
+      if fb1.form_submit_button("💾 Update Feed / Mortality Record", type="primary"):
+        new_tot = float(ef_qty) * float(ef_ucost)
+        exec_sql(
+            pg_engine,
+            """
+            UPDATE feed_and_mortality SET
+                animal_type = ?, room_number = ?, id_number = ?, feed_type = ?,
+                food_type = ?, food_quantity_of_what = ?, quantity = ?, unit_cost = ?,
+                total_cost = ?, date_recorded = ?, date_finish = ?, mortality_count = ?,
+                mortality_of_what = ?, death_count = ?, death_of_what = ?,
+                date_of_mortality = ?, date_of_death = ?, other_expenses = ?
+            WHERE id = ?
+            """,
+            (
+                ef_atype,
+                ef_room,
+                ef_aid,
+                ef_feed,
+                ef_food,
+                ef_ofwhat,
+                float(ef_qty),
+                float(ef_ucost),
+                new_tot,
+                ef_drec,
+                ef_dfin,
+                int(ef_mcnt),
+                ef_mwhat,
+                int(ef_dcnt),
+                ef_dwhat,
+                ef_mdate,
+                ef_ddate,
+                float(ef_oexp),
+                int(edit_fid),
+            ),
+        )
+        st.success(f"Updated Feed / Mortality Record #{edit_fid}.")
+        st.rerun()
+      if fb2.form_submit_button("🗑️ Delete Feed / Mortality Record"):
+        exec_sql(pg_engine, "DELETE FROM feed_and_mortality WHERE id = ?", (int(edit_fid),))
+        st.warning(f"Deleted Feed / Mortality Record #{edit_fid}.")
+        st.rerun()
   else:
     st.info("No feed, mortality, or death logs yet.")
 
+
 # ---------------------------------------------------------
-# 4. HEALTH, VISIT DATE, DISEASE & MEDICATION (DYNAMIC BY ANIMAL)
+# 4. HEALTH, VISIT DATE, DISEASE & MEDICATION (EDITABLE + OPTIONAL DATE + CSV)
 # ---------------------------------------------------------
 elif nav == "🩺 Health & Medication":
   st.subheader("🩺 Vet Visits, Diseases & Animal Medication")
   st.caption(
-      "Select an Animal Type—common diseases, vaccines, medications, housing labels, "
-      "and Animal IDs update automatically. Pick from the presets or type custom values."
+      "Select an Animal Type. Visit date defaults to empty if none is selected. "
+      "All health logs are editable and downloadable as CSV."
   )
-
   h_top1, h_top2 = st.columns([1, 2.2])
   with h_top1:
     h_type = st.selectbox(
@@ -1795,7 +2255,6 @@ elif nav == "🩺 Health & Medication":
         caption=f"Health & Vet: {h_type}",
         hero=False,
     )
-
   with h_top2:
     with st.form(f"health_form_{h_type}", clear_on_submit=True):
       h_id = editable_text_dropdown(
@@ -1823,30 +2282,28 @@ elif nav == "🩺 Health & Medication":
           key_prefix=f"health_med_{h_type}",
           placeholder="Or type drug/vaccine name...",
       )
-
       c_v1, c_v2 = st.columns(2)
       with c_v1:
         visit_dt = date_input_with_display(
-            "Visit Date", f"dt_visit_{h_type}", date.today()
+            "Visit Date (Optional)", f"dt_visit_{h_type}", None
         )
       vet_cost = c_v2.number_input(
           "Medication / Visit Cost (optional)", min_value=0.0, step=1.0
       )
-
       if st.form_submit_button(f"Save {h_type} Health Record", type="primary"):
         exec_sql(
             pg_engine,
             """
-                  INSERT INTO health_logs (
-                      id_number, animal_type, room_number, visit_date,
-                      disease, medication, vet_cost
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                  """,
+            INSERT INTO health_logs (
+                id_number, animal_type, room_number, visit_date,
+                disease, medication, vet_cost
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
             (
                 h_id or "General",
                 h_type,
                 h_room or prof["housing_presets"][0],
-                str(visit_dt),
+                visit_dt,
                 disease or prof["diseases"][0],
                 medication or prof["medications"][0],
                 float(vet_cost),
@@ -1858,19 +2315,89 @@ elif nav == "🩺 Health & Medication":
   df_health = read_df(pg_engine, "SELECT * FROM health_logs ORDER BY id DESC")
   if not df_health.empty:
     st.dataframe(df_health, use_container_width=True, hide_index=True)
+    st.download_button(
+        "⬇️ Download Health & Medication Records (CSV)",
+        data=to_csv_bytes(df_health),
+        file_name="dp_farms_health_medication_records.csv",
+        mime="text/csv",
+        key="dl_health_csv",
+    )
+
+    # EDITABLE HEALTH RECORDS
+    st.markdown("---")
+    st.subheader("✏️ Edit Any Health & Medication Record")
+    edit_hid = st.selectbox(
+        "Select Health Log ID to Edit",
+        df_health["id"].tolist(),
+        format_func=lambda x: (
+            f"ID #{x} — {df_health[df_health['id']==x].iloc[0]['id_number']} | "
+            f"{df_health[df_health['id']==x].iloc[0]['disease']}"
+        ),
+        key="select_edit_health_id",
+    )
+    h_row = df_health[df_health["id"] == edit_hid].iloc[0]
+    with st.form("edit_health_record_form"):
+      he1, he2, he3 = st.columns(3)
+      eh_aid = he1.text_input("Animal ID", value=clean_str_val(h_row["id_number"])).strip()
+      eh_atype = he2.selectbox(
+          "Animal Type",
+          ANIMAL_CATEGORIES,
+          index=ANIMAL_CATEGORIES.index(h_row["animal_type"])
+          if h_row["animal_type"] in ANIMAL_CATEGORIES
+          else 0,
+      )
+      eh_room = he3.text_input("Room / Housing", value=clean_str_val(h_row["room_number"])).strip()
+
+      he4, he5, he6, he7 = st.columns(4)
+      eh_dis = he4.text_input("Disease / Condition", value=clean_str_val(h_row["disease"])).strip()
+      eh_med = he5.text_input("Medication / Vaccine", value=clean_str_val(h_row["medication"])).strip()
+      eh_vdate = he6.text_input(
+          "Visit Date (YYYY-MM-DD or empty)", value=clean_str_val(h_row["visit_date"])
+      ).strip()
+      eh_cost = he7.number_input(
+          "Vet / Medication Cost", min_value=0.0, value=safe_float(h_row["vet_cost"], 0.0), step=1.0
+      )
+
+      hb1, hb2 = st.columns(2)
+      if hb1.form_submit_button("💾 Update Health Record", type="primary"):
+        exec_sql(
+            pg_engine,
+            """
+            UPDATE health_logs SET
+                id_number = ?, animal_type = ?, room_number = ?, visit_date = ?,
+                disease = ?, medication = ?, vet_cost = ?
+            WHERE id = ?
+            """,
+            (
+                eh_aid or "General",
+                eh_atype,
+                eh_room,
+                eh_vdate,
+                eh_dis,
+                eh_med,
+                float(eh_cost),
+                int(edit_hid),
+            ),
+        )
+        st.success(f"Updated Health Record #{edit_hid}.")
+        st.rerun()
+      if hb2.form_submit_button("🗑️ Delete Health Record"):
+        exec_sql(pg_engine, "DELETE FROM health_logs WHERE id = ?", (int(edit_hid),))
+        st.warning(f"Deleted Health Record #{edit_hid}.")
+        st.rerun()
   else:
     st.info("No health or medication records yet.")
 
+
 # ---------------------------------------------------------
-# 5. INVENTORY, PLANNING TO BUY/SELL, SALES & P/L (DYNAMIC BY ANIMAL)
+# 5. INVENTORY, PLANNING TO BUY/SELL, SALES & P/L (EDITABLE + OPTIONAL DATES + CSV)
 # ---------------------------------------------------------
 elif nav == "📦 Inventory, Planning & Sales/P&L":
   st.subheader("📦 Inventory, Buy/Sell Planning, Sales & Profit/Loss")
   st.caption(
-      "Select an Animal Type—item/batch presets and registered IDs adapt to that species. "
-      "Choose from the dropdown or type your own description and numbers."
+      "Select an Animal Type. Dates default to empty if none is selected. "
+      "All inventory and sales entries are editable and downloadable as CSV."
   )
-
   i_top1, i_top2 = st.columns([1, 2.2])
   with i_top1:
     a_type = st.selectbox(
@@ -1888,7 +2415,6 @@ elif nav == "📦 Inventory, Planning & Sales/P&L":
         caption=f"Inventory & Sales: {a_type}",
         hero=False,
     )
-
   with i_top2:
     with st.form(f"inv_sales_form_{a_type}", clear_on_submit=True):
       rec_type = st.selectbox("Entry Type", ["Inventory", "Sale"])
@@ -1905,7 +2431,6 @@ elif nav == "📦 Inventory, Planning & Sales/P&L":
           key_prefix=f"inv_item_{a_type}",
           placeholder="Or type custom item/batch...",
       )
-
       qty = quantity_selector(
           "Quantity", f"inv_qty_{a_type}", default_preset=1, min_val=0.0, step=1.0
       )
@@ -1916,32 +2441,30 @@ elif nav == "📦 Inventory, Planning & Sales/P&L":
           min_val=0.0,
           step=1.0,
       )
-
       c7, c8, c9 = st.columns(3)
       with c7:
         rec_date = date_input_with_display(
-            "Transaction Date", f"dt_irec_{a_type}", date.today()
+            "Transaction Date (Optional)", f"dt_irec_{a_type}", None
         )
       with c8:
         plan_buy = date_input_with_display(
-            "Planning to Buy Time", f"dt_ibuy_{a_type}", date.today()
+            "Planning to Buy Time (Optional)", f"dt_ibuy_{a_type}", None
         )
       with c9:
         plan_sell = date_input_with_display(
-            "Planning to Sell Time", f"dt_isell_{a_type}", date.today()
+            "Planning to Sell Time (Optional)", f"dt_isell_{a_type}", None
         )
-
       if st.form_submit_button(f"Save {a_type} {rec_type} Entry", type="primary"):
         total_val = float(qty) * float(unit_price)
         exec_sql(
             pg_engine,
             """
-                  INSERT INTO inventory_and_sales (
-                      record_type, animal_type, id_number, item_or_batch,
-                      quantity, unit_price, total_amount, record_date,
-                      plan_buy_time, plan_sell_time
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                  """,
+            INSERT INTO inventory_and_sales (
+                record_type, animal_type, id_number, item_or_batch,
+                quantity, unit_price, total_amount, record_date,
+                plan_buy_time, plan_sell_time
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
             (
                 rec_type,
                 a_type,
@@ -1950,9 +2473,9 @@ elif nav == "📦 Inventory, Planning & Sales/P&L":
                 float(qty),
                 float(unit_price),
                 total_val,
-                str(rec_date),
-                str(plan_buy),
-                str(plan_sell),
+                rec_date,
+                plan_buy,
+                plan_sell,
             ),
         )
         st.success(f"{a_type} {rec_type} entry saved (Total: {total_val:,.2f}).")
@@ -1972,20 +2495,109 @@ elif nav == "📦 Inventory, Planning & Sales/P&L":
   )
   if not df_inv_sales.empty:
     st.dataframe(df_inv_sales, use_container_width=True, hide_index=True)
+    st.download_button(
+        "⬇️ Download Inventory & Sales Records (CSV)",
+        data=to_csv_bytes(df_inv_sales),
+        file_name="dp_farms_inventory_sales_records.csv",
+        mime="text/csv",
+        key="dl_inv_sales_csv",
+    )
+
+    # EDITABLE INVENTORY & SALES RECORDS
+    st.markdown("---")
+    st.subheader("✏️ Edit Any Inventory or Sale Record")
+    edit_iid = st.selectbox(
+        "Select Inventory / Sale ID to Edit",
+        df_inv_sales["id"].tolist(),
+        format_func=lambda x: (
+            f"ID #{x} — [{df_inv_sales[df_inv_sales['id']==x].iloc[0]['record_type']}] "
+            f"{df_inv_sales[df_inv_sales['id']==x].iloc[0]['item_or_batch']}"
+        ),
+        key="select_edit_inv_id",
+    )
+    i_row = df_inv_sales[df_inv_sales["id"] == edit_iid].iloc[0]
+    with st.form("edit_inv_sales_form"):
+      ie1, ie2, ie3 = st.columns(3)
+      ei_rtype = ie1.selectbox(
+          "Entry Type",
+          ["Inventory", "Sale"],
+          index=0 if i_row["record_type"] == "Inventory" else 1,
+      )
+      ei_atype = ie2.selectbox(
+          "Animal Type",
+          ANIMAL_CATEGORIES,
+          index=ANIMAL_CATEGORIES.index(i_row["animal_type"])
+          if i_row["animal_type"] in ANIMAL_CATEGORIES
+          else 0,
+      )
+      ei_aid = ie3.text_input("Animal ID / Batch", value=clean_str_val(i_row["id_number"])).strip()
+
+      ie4, ie5, ie6 = st.columns(3)
+      ei_item = ie4.text_input(
+          "Item / Batch Description", value=clean_str_val(i_row["item_or_batch"])
+      ).strip()
+      ei_qty = ie5.number_input("Quantity", min_value=0.0, value=safe_float(i_row["quantity"], 1.0), step=1.0)
+      ei_price = ie6.number_input(
+          "Unit Price", min_value=0.0, value=safe_float(i_row["unit_price"], 0.0), step=1.0
+      )
+
+      ie7, ie8, ie9 = st.columns(3)
+      ei_rdate = ie7.text_input(
+          "Transaction Date (YYYY-MM-DD or empty)", value=clean_str_val(i_row["record_date"])
+      ).strip()
+      ei_pbuy = ie8.text_input(
+          "Plan Buy Time (YYYY-MM-DD or empty)", value=clean_str_val(i_row["plan_buy_time"])
+      ).strip()
+      ei_psell = ie9.text_input(
+          "Plan Sell Time (YYYY-MM-DD or empty)", value=clean_str_val(i_row["plan_sell_time"])
+      ).strip()
+
+      ib1, ib2 = st.columns(2)
+      if ib1.form_submit_button("💾 Update Inventory / Sale Record", type="primary"):
+        new_tamt = float(ei_qty) * float(ei_price)
+        exec_sql(
+            pg_engine,
+            """
+            UPDATE inventory_and_sales SET
+                record_type = ?, animal_type = ?, id_number = ?, item_or_batch = ?,
+                quantity = ?, unit_price = ?, total_amount = ?, record_date = ?,
+                plan_buy_time = ?, plan_sell_time = ?
+            WHERE id = ?
+            """,
+            (
+                ei_rtype,
+                ei_atype,
+                ei_aid,
+                ei_item,
+                float(ei_qty),
+                float(ei_price),
+                new_tamt,
+                ei_rdate,
+                ei_pbuy,
+                ei_psell,
+                int(edit_iid),
+            ),
+        )
+        st.success(f"Updated Inventory / Sale Record #{edit_iid}.")
+        st.rerun()
+      if ib2.form_submit_button("🗑️ Delete Inventory / Sale Record"):
+        exec_sql(pg_engine, "DELETE FROM inventory_and_sales WHERE id = ?", (int(edit_iid),))
+        st.warning(f"Deleted Inventory / Sale Record #{edit_iid}.")
+        st.rerun()
   else:
     st.info("No inventory or sales records yet.")
 
+
 # ---------------------------------------------------------
-# 6. EMPLOY WORKERS: DAILY, WEEKLY, MONTHLY, CREDIT & LOANS
+# 6. EMPLOY WORKERS: DAILY, WEEKLY, MONTHLY, CREDIT & LOANS (EDITABLE + CSV)
 # ---------------------------------------------------------
 elif nav == "👷 Workers: Pay, Credit & Loans":
   st.subheader("👷 Workers Registry, Payroll, Credit & Worker Loans")
   st.caption(
-      "Pick a preset role/schedule or type your own custom role and amounts."
+      "Pick a preset role/schedule or type your own custom role and amounts. "
+      "Date defaults to empty if none is selected. Worker profiles and logs are editable."
   )
-
   col_reg, col_act = st.columns(2)
-
   with col_reg:
     st.markdown("#### Register New Worker")
     with st.form("add_worker_form", clear_on_submit=True):
@@ -2020,9 +2632,9 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
         exec_sql(
             pg_engine,
             """
-                        INSERT INTO workers (worker_id, full_name, role, pay_cycle, pay_rate, credit_owed, loan_balance)
-                        VALUES (?, ?, ?, ?, ?, 0.0, 0.0)
-                        """,
+            INSERT INTO workers (worker_id, full_name, role, pay_cycle, pay_rate, credit_owed, loan_balance)
+            VALUES (?, ?, ?, ?, ?, 0.0, 0.0)
+            """,
             (
                 w_id,
                 final_w_name,
@@ -2033,7 +2645,6 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
         )
         st.success(f"Registered worker `{final_w_name}` ({w_cycle or 'Monthly'}).")
         st.rerun()
-
   with col_act:
     st.markdown("#### Record Pay, Credit or Worker Loan")
     df_w = read_df(pg_engine, "SELECT * FROM workers ORDER BY full_name ASC")
@@ -2057,9 +2668,8 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
         amt = quantity_selector(
             "Amount", "w_act_amt", default_preset=10, min_val=0.0, step=5.0
         )
-        act_date = date_input_with_display("Date", "dt_wact", date.today())
+        act_date = date_input_with_display("Date (Optional)", "dt_wact", None)
         notes = st.text_input("Notes / Remarks (optional)").strip()
-
         if st.form_submit_button("Apply Worker Action", type="primary"):
           w_row = w_map[chosen_w_label]
           wid = w_row["worker_id"]
@@ -2067,7 +2677,6 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
           cur_credit = float(w_row["credit_owed"] or 0.0)
           cur_loan = float(w_row["loan_balance"] or 0.0)
           val = float(amt)
-
           if action_type == "Pay on Credit (Add to Credit Owed)":
             cur_credit += val
           elif action_type == "Settle Credit Owed":
@@ -2076,7 +2685,6 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
             cur_loan += val
           elif action_type == "Deduct Loan Repayment from Worker":
             cur_loan = max(0.0, cur_loan - val)
-
           exec_sql(
               pg_engine,
               "UPDATE workers SET credit_owed = ?, loan_balance = ? WHERE worker_id = ?",
@@ -2085,10 +2693,10 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
           exec_sql(
               pg_engine,
               """
-                            INSERT INTO worker_finance_logs (worker_id, worker_name, action_type, amount, entry_date, notes)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                            """,
-              (wid, wname, action_type, val, str(act_date), notes),
+              INSERT INTO worker_finance_logs (worker_id, worker_name, action_type, amount, entry_date, notes)
+              VALUES (?, ?, ?, ?, ?, ?)
+              """,
+              (wid, wname, action_type, val, act_date, notes),
           )
           st.success(f"Recorded `{action_type}` of {val:,.2f} for {wname}.")
           st.rerun()
@@ -2102,6 +2710,56 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
   if not df_w_display.empty:
     st.subheader("👥 Workers, Credit Owed & Loan Balances")
     st.dataframe(df_w_display, use_container_width=True, hide_index=True)
+    st.download_button(
+        "⬇️ Download Workers Directory (CSV)",
+        data=to_csv_bytes(df_w_display),
+        file_name="dp_farms_workers.csv",
+        mime="text/csv",
+        key="dl_workers_csv",
+    )
+
+    st.subheader("✏️ Edit Worker Profile")
+    edit_wid = st.selectbox(
+        "Select Worker ID to Edit",
+        df_w_display["worker_id"].tolist(),
+        format_func=lambda x: (
+            f"{x} — {df_w_display[df_w_display['worker_id']==x].iloc[0]['full_name']}"
+        ),
+        key="select_edit_worker_id",
+    )
+    w_erow = df_w_display[df_w_display["worker_id"] == edit_wid].iloc[0]
+    with st.form("edit_worker_profile_form"):
+      we1, we2, we3 = st.columns(3)
+      ew_name = we1.text_input("Full Name", value=clean_str_val(w_erow["full_name"])).strip()
+      ew_role = we2.text_input("Role / Duty", value=clean_str_val(w_erow["role"])).strip()
+      ew_cycle = we3.text_input("Pay Schedule", value=clean_str_val(w_erow["pay_cycle"])).strip()
+
+      we4, we5, we6 = st.columns(3)
+      ew_rate = we4.number_input("Pay Rate", min_value=0.0, value=safe_float(w_erow["pay_rate"], 0.0), step=5.0)
+      ew_cred = we5.number_input(
+          "Credit Owed", min_value=0.0, value=safe_float(w_erow["credit_owed"], 0.0), step=5.0
+      )
+      ew_loan = we6.number_input(
+          "Loan Balance", min_value=0.0, value=safe_float(w_erow["loan_balance"], 0.0), step=5.0
+      )
+      wb1, wb2 = st.columns(2)
+      if wb1.form_submit_button("💾 Update Worker Profile", type="primary"):
+        exec_sql(
+            pg_engine,
+            """
+            UPDATE workers SET
+                full_name = ?, role = ?, pay_cycle = ?, pay_rate = ?,
+                credit_owed = ?, loan_balance = ?
+            WHERE worker_id = ?
+            """,
+            (ew_name, ew_role, ew_cycle, float(ew_rate), float(ew_cred), float(ew_loan), edit_wid),
+        )
+        st.success(f"Updated Worker `{edit_wid}`.")
+        st.rerun()
+      if wb2.form_submit_button("🗑️ Delete Worker"):
+        exec_sql(pg_engine, "DELETE FROM workers WHERE worker_id = ?", (edit_wid,))
+        st.warning(f"Deleted Worker `{edit_wid}`.")
+        st.rerun()
 
   df_w_history = read_df(
       pg_engine, "SELECT * FROM worker_finance_logs ORDER BY id DESC"
@@ -2109,18 +2767,58 @@ elif nav == "👷 Workers: Pay, Credit & Loans":
   if not df_w_history.empty:
     st.subheader("🧾 Worker Pay, Credit & Loan History")
     st.dataframe(df_w_history, use_container_width=True, hide_index=True)
+    st.download_button(
+        "⬇️ Download Worker Finance History (CSV)",
+        data=to_csv_bytes(df_w_history),
+        file_name="dp_farms_worker_finance_logs.csv",
+        mime="text/csv",
+        key="dl_wlogs_csv",
+    )
+
+    st.subheader("✏️ Edit Worker Finance Log Entry")
+    edit_wlid = st.selectbox(
+        "Select Finance Log ID to Edit",
+        df_w_history["id"].tolist(),
+        format_func=lambda x: (
+            f"ID #{x} — {df_w_history[df_w_history['id']==x].iloc[0]['worker_name']} | "
+            f"{df_w_history[df_w_history['id']==x].iloc[0]['action_type']}"
+        ),
+        key="select_edit_wlog_id",
+    )
+    wl_row = df_w_history[df_w_history["id"] == edit_wlid].iloc[0]
+    with st.form("edit_worker_log_form"):
+      wle1, wle2, wle3, wle4 = st.columns(4)
+      ewl_act = wle1.text_input("Action Type", value=clean_str_val(wl_row["action_type"])).strip()
+      ewl_amt = wle2.number_input("Amount", min_value=0.0, value=safe_float(wl_row["amount"], 0.0), step=5.0)
+      ewl_date = wle3.text_input(
+          "Entry Date (YYYY-MM-DD or empty)", value=clean_str_val(wl_row["entry_date"])
+      ).strip()
+      ewl_notes = wle4.text_input("Notes", value=clean_str_val(wl_row["notes"])).strip()
+      wlb1, wlb2 = st.columns(2)
+      if wlb1.form_submit_button("💾 Update Finance Log", type="primary"):
+        exec_sql(
+            pg_engine,
+            "UPDATE worker_finance_logs SET action_type = ?, amount = ?, entry_date = ?, notes = ? WHERE id = ?",
+            (ewl_act, float(ewl_amt), ewl_date, ewl_notes, int(edit_wlid)),
+        )
+        st.success(f"Updated Worker Finance Log #{edit_wlid}.")
+        st.rerun()
+      if wlb2.form_submit_button("🗑️ Delete Finance Log"):
+        exec_sql(pg_engine, "DELETE FROM worker_finance_logs WHERE id = ?", (int(edit_wlid),))
+        st.warning(f"Deleted Worker Finance Log #{edit_wlid}.")
+        st.rerun()
+
 
 # ---------------------------------------------------------
-# 7. FARM LOANS TAKEN BY THE FARM
+# 7. FARM LOANS TAKEN BY THE FARM (EDITABLE + OPTIONAL DATE + CSV)
 # ---------------------------------------------------------
 elif nav == "🏦 Farm Loans Taken":
   st.subheader("🏦 Farm Loans Taken & Repayment Tracking")
   st.caption(
-      "Select a lender preset or type your own lender name and loan amounts."
+      "Select a lender preset or type your own lender name. Date defaults to empty if none is selected. "
+      "All loan entries are editable and downloadable as CSV."
   )
-
   c_new, c_rep = st.columns(2)
-
   with c_new:
     st.markdown("#### Take a New Farm Loan")
     with st.form("take_loan_form", clear_on_submit=True):
@@ -2144,7 +2842,7 @@ elif nav == "🏦 Farm Loans Taken":
           step=50.0,
       )
       taken_date = date_input_with_display(
-          "Date Taken", "dt_ltaken", date.today()
+          "Date Taken (Optional)", "dt_ltaken", None
       )
       l_notes = st.text_input("Purpose / Terms (optional)").strip()
       if st.form_submit_button("Record Farm Loan", type="primary"):
@@ -2153,21 +2851,20 @@ elif nav == "🏦 Farm Loans Taken":
         exec_sql(
             pg_engine,
             """
-                        INSERT INTO farm_loans (loan_id, lender_name, principal_amount, amount_paid, balance_due, date_taken, notes)
-                        VALUES (?, ?, ?, 0.0, ?, ?, ?)
-                        """,
+            INSERT INTO farm_loans (loan_id, lender_name, principal_amount, amount_paid, balance_due, date_taken, notes)
+            VALUES (?, ?, ?, 0.0, ?, ?, ?)
+            """,
             (
                 lid,
                 final_lender,
                 float(principal),
                 float(principal),
-                str(taken_date),
+                taken_date,
                 l_notes,
             ),
         )
         st.success(f"Recorded loan `{lid}` from {final_lender}.")
         st.rerun()
-
   with c_rep:
     st.markdown("#### Record Farm Loan Repayment")
     df_loans_open = read_df(
@@ -2209,8 +2906,64 @@ elif nav == "🏦 Farm Loans Taken":
   )
   if not df_all_loans.empty:
     st.dataframe(df_all_loans, use_container_width=True, hide_index=True)
+    st.download_button(
+        "⬇️ Download Farm Loans Records (CSV)",
+        data=to_csv_bytes(df_all_loans),
+        file_name="dp_farms_loans_records.csv",
+        mime="text/csv",
+        key="dl_loans_csv",
+    )
+
+    st.subheader("✏️ Edit Any Farm Loan Record")
+    edit_lid = st.selectbox(
+        "Select Loan ID to Edit",
+        df_all_loans["loan_id"].tolist(),
+        format_func=lambda x: (
+            f"{x} — {df_all_loans[df_all_loans['loan_id']==x].iloc[0]['lender_name']}"
+        ),
+        key="select_edit_loan_id",
+    )
+    l_erow = df_all_loans[df_all_loans["loan_id"] == edit_lid].iloc[0]
+    with st.form("edit_farm_loan_form"):
+      le1, le2, le3 = st.columns(3)
+      el_lender = le1.text_input("Lender Name", value=clean_str_val(l_erow["lender_name"])).strip()
+      el_prin = le2.number_input(
+          "Principal Amount", min_value=0.0, value=safe_float(l_erow["principal_amount"], 0.0), step=50.0
+      )
+      el_paid = le3.number_input(
+          "Amount Paid", min_value=0.0, value=safe_float(l_erow["amount_paid"], 0.0), step=20.0
+      )
+
+      le4, le5, le6 = st.columns(3)
+      el_bal = le4.number_input(
+          "Balance Due", min_value=0.0, value=safe_float(l_erow["balance_due"], 0.0), step=20.0
+      )
+      el_dtaken = le5.text_input(
+          "Date Taken (YYYY-MM-DD or empty)", value=clean_str_val(l_erow["date_taken"])
+      ).strip()
+      el_notes = le6.text_input("Notes", value=clean_str_val(l_erow["notes"])).strip()
+
+      lb1, lb2 = st.columns(2)
+      if lb1.form_submit_button("💾 Update Farm Loan", type="primary"):
+        exec_sql(
+            pg_engine,
+            """
+            UPDATE farm_loans SET
+                lender_name = ?, principal_amount = ?, amount_paid = ?,
+                balance_due = ?, date_taken = ?, notes = ?
+            WHERE loan_id = ?
+            """,
+            (el_lender, float(el_prin), float(el_paid), float(el_bal), el_dtaken, el_notes, edit_lid),
+        )
+        st.success(f"Updated Farm Loan `{edit_lid}`.")
+        st.rerun()
+      if lb2.form_submit_button("🗑️ Delete Farm Loan"):
+        exec_sql(pg_engine, "DELETE FROM farm_loans WHERE loan_id = ?", (edit_lid,))
+        st.warning(f"Deleted Farm Loan `{edit_lid}`.")
+        st.rerun()
   else:
     st.info("No farm loans recorded yet.")
+
 
 # ---------------------------------------------------------
 # 8. ADMIN USER & PASSWORD CONTROL
@@ -2219,13 +2972,11 @@ elif nav == "🛡️ Admin User & Password Control":
   if not is_admin:
     st.error("Administrator access required.")
     st.stop()
-
   st.subheader("🛡️ Admin User Management & Password Reset")
   df_users = read_df(
       pg_engine, "SELECT id, username, full_name, role FROM users ORDER BY id ASC"
   )
   st.dataframe(df_users, use_container_width=True, hide_index=True)
-
   c_add, c_pwd = st.columns(2)
   with c_add:
     st.markdown("#### Create New User Account")
@@ -2250,7 +3001,6 @@ elif nav == "🛡️ Admin User & Password Control":
           st.rerun()
         except Exception as exc:
           st.error(f"Could not create user: {exc}")
-
   with c_pwd:
     st.markdown("#### Reset User Password")
     if not df_users.empty:
