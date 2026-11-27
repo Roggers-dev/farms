@@ -1388,10 +1388,22 @@ if "active_page" not in st.session_state:
   st.session_state.active_page = NAV_SECTIONS_BASE[0]
 if "pending_page_jump" in st.session_state and st.session_state.pending_page_jump:
   st.session_state.active_page = st.session_state.pending_page_jump
+  st.session_state.dp_sidebar_page_radio = st.session_state.pending_page_jump
   st.session_state.pending_page_jump = None
 
 
+def go_to_animal_registration(animal_category):
+  st.session_state.selected_animal_type = animal_category
+  st.session_state.live_animal_cat_selector = animal_category
+  st.session_state.active_page = "🐾 Animals & Categories"
+  st.session_state.dp_sidebar_page_radio = "🐾 Animals & Categories"
+  st.session_state.pending_page_jump = "🐾 Animals & Categories"
+  st.rerun()
+
+
 def request_navigation(target_page):
+  st.session_state.active_page = target_page
+  st.session_state.dp_sidebar_page_radio = target_page
   st.session_state.pending_page_jump = target_page
   st.rerun()
 
@@ -1572,10 +1584,12 @@ if st.sidebar.button("🚪 Sign Out"):
   st.session_state.farm_user = None
   st.rerun()
 
+if "dp_sidebar_page_radio" not in st.session_state or st.session_state.dp_sidebar_page_radio not in allowed_pages:
+  st.session_state.dp_sidebar_page_radio = st.session_state.active_page
+
 sidebar_choice = st.sidebar.radio(
     "D&P FARMS Pages",
     allowed_pages,
-    index=allowed_pages.index(st.session_state.active_page),
     key="dp_sidebar_page_radio",
 )
 if sidebar_choice != st.session_state.active_page:
@@ -1635,6 +1649,12 @@ if nav == "🏡 Farm Overview & Gallery":
   for idx, cat in enumerate(ANIMAL_CATEGORIES):
     with g_cols[idx % 4]:
       render_uniform_image(ANIMAL_IMAGES[cat], caption=cat, hero=False)
+      if st.button(
+          f"🖼️ Open {cat} Registration",
+          key=f"overview_img_jump_{idx}",
+          use_container_width=True,
+      ):
+        go_to_animal_registration(cat)
       if not df_animals.empty and "animal_type" in df_animals.columns:
         sub_c = df_animals[df_animals["animal_type"] == cat]
         count_in_cat = len(sub_c)
@@ -1670,8 +1690,7 @@ if nav == "🏡 Farm Overview & Gallery":
           use_container_width=True,
           type="primary",
       ):
-        st.session_state.selected_animal_type = cat
-        request_navigation("🐾 Animals & Categories")
+        go_to_animal_registration(cat)
 
   st.markdown("---")
   st.subheader("📊 Individual Animals Summary: Adult & Young Females and Males")
@@ -1745,8 +1764,7 @@ elif nav == "🐾 Animals & Categories":
           else f"Select {cat}"
       )
       if st.button(btn_label, key=f"img_jump_{idx}", use_container_width=True):
-        st.session_state.selected_animal_type = cat
-        st.rerun()
+        go_to_animal_registration(cat)
 
   st.markdown("---")
   sel_col1, sel_col2 = st.columns([1, 2])
